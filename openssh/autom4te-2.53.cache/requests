@@ -1,4 +1,4 @@
-# This file was created by autom4te.
+# This file was created by autom4te-2.53.
 # It contains the lists of macros which have been traced.
 # It can be safely removed.
 
@@ -7,10 +7,10 @@
                       '0',
                       1,
                       [
-                        '/usr/share/autoconf'
+                        '/usr/share/autoconf-2.53'
                       ],
                       [
-                        '/usr/share/autoconf/autoconf/autoconf.m4f',
+                        '--reload-state=/usr/share/autoconf-2.53/autoconf/autoconf.m4f',
                         'aclocal.m4',
                         'configure.ac'
                       ],
@@ -24,6 +24,7 @@
                         'AC_FUNC_SETVBUF_REVERSED' => 1,
                         'AC_HEADER_SYS_WAIT' => 1,
                         'AC_TYPE_UID_T' => 1,
+                        'AM_CONDITIONAL' => 1,
                         'AC_CHECK_LIB' => 1,
                         'AC_PROG_LN_S' => 1,
                         'AC_FUNC_MEMCMP' => 1,
@@ -33,6 +34,7 @@
                         'AC_FUNC_STRTOD' => 1,
                         'AC_HEADER_DIRENT' => 1,
                         'AC_FUNC_UTIME_NULL' => 1,
+                        'AC_CONFIG_FILES' => 1,
                         'AC_FUNC_ALLOCA' => 1,
                         'AC_C_CONST' => 1,
                         'include' => 1,
@@ -50,14 +52,18 @@
                         'AC_STRUCT_ST_BLOCKS' => 1,
                         'AC_PROG_GCC_TRADITIONAL' => 1,
                         'AC_TYPE_SIGNAL' => 1,
+                        'AM_PROG_LIBTOOL' => 1,
                         'AC_FUNC_FNMATCH' => 1,
                         'AC_PROG_CPP' => 1,
                         'AC_FUNC_STAT' => 1,
                         'AC_PROG_INSTALL' => 1,
+                        'AM_GNU_GETTEXT' => 1,
+                        'AC_CONFIG_SUBDIRS' => 1,
                         'AC_FUNC_STRCOLL' => 1,
-                        'AC_C_INLINE' => 1,
                         'AC_LIBSOURCE' => 1,
+                        'AC_C_INLINE' => 1,
                         'AC_FUNC_CHOWN' => 1,
+                        'AC_INIT' => 1,
                         'AC_PROG_LEX' => 1,
                         'AH_OUTPUT' => 1,
                         'AC_HEADER_STDC' => 1,
@@ -82,6 +88,7 @@
                         'AC_FUNC_MMAP' => 1,
                         'AC_STRUCT_TM' => 1,
                         'AC_SUBST' => 1,
+                        'AC_PROG_LIBTOOL' => 1,
                         'AC_PROG_CC' => 1
                       }
                     ], 'Request' )
