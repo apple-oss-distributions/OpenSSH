@@ -1,8 +1,4 @@
-/*	$OpenBSD: ssh-dss.h,v 1.6 2002/02/24 19:14:59 markus Exp $	*/
-
 /*
- * Copyright (c) 2000 Markus Friedl.  All rights reserved.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -23,10 +19,49 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef DSA_H
-#define DSA_H
 
-int	 ssh_dss_sign(Key *, u_char **, u_int *, u_char *, u_int);
-int	 ssh_dss_verify(Key *, u_char *, u_int, u_char *, u_int);
+#include "includes.h"
 
+#ifdef HAVE_SYS_MMAN_H
+#include <sys/mman.h>
 #endif
+
+#include "log.h"
+
+void *xmmap(size_t size)
+{
+	void *address;
+
+#ifdef HAVE_MMAP
+# ifdef MAP_ANON
+	address = mmap(NULL, size, PROT_WRITE|PROT_READ, MAP_ANON|MAP_SHARED,
+	    -1, 0);
+# else
+	address = mmap(NULL, size, PROT_WRITE|PROT_READ, MAP_SHARED,
+	    open("/dev/zero", O_RDWR), 0);
+# endif
+
+#define MM_SWAP_TEMPLATE "/var/run/sshd.mm.XXXXXXXX"
+	if (address == MAP_FAILED) {
+		char tmpname[sizeof(MM_SWAP_TEMPLATE)] = MM_SWAP_TEMPLATE;
+		int tmpfd;
+
+		tmpfd = mkstemp(tmpname);
+		if (tmpfd == -1)
+			fatal("mkstemp(\"%s\"): %s",
+			    MM_SWAP_TEMPLATE, strerror(errno));
+		unlink(tmpname);
+		ftruncate(tmpfd, size);
+		address = mmap(NULL, size, PROT_WRITE|PROT_READ, MAP_SHARED,
+		    tmpfd, 0);
+		close(tmpfd);
+	}
+
+	return (address);
+#else
+	fatal("%s: UsePrivilegeSeparation=yes and Compression=yes not supported",
+	    __func__);
+#endif /* HAVE_MMAP */
+
+}
+

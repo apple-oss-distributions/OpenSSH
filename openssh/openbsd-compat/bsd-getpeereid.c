@@ -1,7 +1,5 @@
-/*	$OpenBSD: ssh-rsa.h,v 1.6 2002/02/24 19:14:59 markus Exp $	*/
-
 /*
- * Copyright (c) 2000 Markus Friedl.  All rights reserved.
+ * Copyright (c) 2002 Damien Miller.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,10 +21,36 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef SSH_RSA_H
-#define SSH_RSA_H
 
-int	 ssh_rsa_sign(Key *, u_char **, u_int *, u_char *, u_int);
-int	 ssh_rsa_verify(Key *, u_char *, u_int, u_char *, u_int);
+#include "includes.h"
 
-#endif
+RCSID("$Id: bsd-getpeereid.c,v 1.1.1.3 2003/04/02 18:36:59 zarzycki Exp $");
+
+#if !defined(HAVE_GETPEEREID)
+
+#if defined(SO_PEERCRED)
+int
+getpeereid(int s, uid_t *euid, gid_t *gid)
+{
+	struct ucred cred;
+	socklen_t len = sizeof(cred);
+
+	if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cred, &len) < 0)
+		return (-1);
+	*euid = cred.uid;
+	*gid = cred.gid;
+
+	return (0);
+}
+#else
+int
+getpeereid(int s, uid_t *euid, gid_t *gid)
+{
+	*euid = geteuid();
+	*gid = getgid();
+
+	return (0);
+}
+#endif /* defined(SO_PEERCRED) */
+
+#endif /* !defined(HAVE_GETPEEREID) */
