@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2000 Markus Friedl.  All rights reserved.
+ * Copyright 1993-2002 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -20,51 +21,40 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
-#include "includes.h"
-RCSID("$OpenBSD: auth2-passwd.c,v 1.2 2002/05/31 11:35:15 markus Exp $");
+#ifndef	_BSD_SOLARIS_H
+#define	_BSD_SOLARIS_H
 
-#include "xmalloc.h"
-#include "packet.h"
-#include "log.h"
-#include "auth.h"
-#include "monitor_wrap.h"
-#include "servconf.h"
-
-/* import */
-extern ServerOptions options;
-
-static int
-userauth_passwd(Authctxt *authctxt)
-{
-	char *password;
-	int authenticated = 0;
-	int change;
-	u_int len;
-	change = packet_get_char();
-	if (change)
-		log("password change not supported");
-	password = packet_get_string(&len);
-	packet_check_eom();
-	if (authctxt->valid &&
-#ifdef HAVE_CYGWIN
-	    check_nt_auth(1, authctxt->pw) &&
-#endif
-	    PRIVSEP(auth_password(authctxt, password)) == 1)
-		authenticated = 1;
-	memset(password, 0, len);
-	xfree(password);
 #if defined(HAVE_BSM_AUDIT_H) && defined(HAVE_LIBBSM)
-	if (!authenticated) {
-		PRIVSEP(solaris_audit_bad_pw("password"));
-	}
-#endif /* BSM */
-	return authenticated;
-}
 
-Authmethod method_passwd = {
-	"password",
-	userauth_passwd,
-	&options.password_authentication
-};
+#pragma ident	"@(#)bsmaudit.h	1.1	01/09/17 SMI"
+
+#ifdef	__cplusplus
+extern "C" {
+#endif
+
+#include <bsm/audit.h>
+#define	AUE_openssh	32800
+
+void solaris_audit_maxtrys(void);
+void solaris_audit_nologin(void);
+void solaris_audit_save_name(const char *name);
+void solaris_audit_save_pw(struct passwd *pwd);
+void solaris_audit_not_console(void);
+void solaris_audit_bad_pw(const char *what);
+void solaris_audit_save_host(const char *host);
+void solaris_audit_save_ttyn(const char *ttyn);
+void solaris_audit_save_port(int port);
+void solaris_audit_save_command(const char *command);
+void solaris_audit_success(void);
+void solaris_audit_logout(void);
+
+#ifdef	__cplusplus
+}
+#endif
+
+#endif /* BSM */
+
+#endif	/* _BSD_SOLARIS_H */
