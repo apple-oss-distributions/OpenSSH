@@ -1,7 +1,5 @@
-/*	$OpenBSD: cli.h,v 1.4 2001/03/01 03:38:33 deraadt Exp $	*/
-
 /*
- * Copyright (c) 2000 Markus Friedl.  All rights reserved.
+ * Copyright (c) 2002 Markus Friedl.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,20 +22,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* $OpenBSD: cli.h,v 1.4 2001/03/01 03:38:33 deraadt Exp $ */
+#include "includes.h"
+RCSID("$OpenBSD: fatal.c,v 1.1 2002/02/22 12:20:34 markus Exp $");
 
-#ifndef CLI_H
-#define CLI_H
+#include "log.h"
 
-/*
- * Presents a prompt and returns the response allocated with xmalloc().
- * Uses /dev/tty or stdin/out depending on arg.  Optionally disables echo
- * of response depending on arg.  Tries to ensure that no other userland
- * buffer is storing the response.
- */
-char*	cli_read_passphrase(const char* prompt, int from_stdin,
-    int echo_enable);
-char*	cli_prompt(char* prompt, int echo_enable);
-void	cli_mesg(char* mesg);
+/* Fatal messages.  This function never returns. */
 
-#endif /* CLI_H */
+void
+fatal(const char *fmt,...)
+{
+	va_list args;
+	va_start(args, fmt);
+	do_log(SYSLOG_LEVEL_FATAL, fmt, args);
+	va_end(args);
+	fatal_cleanup();
+}
