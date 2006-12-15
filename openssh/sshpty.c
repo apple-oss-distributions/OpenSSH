@@ -1,3 +1,4 @@
+/* $OpenBSD: sshpty.c,v 1.26 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -12,11 +13,26 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: sshpty.c,v 1.11 2004/01/11 21:55:06 deraadt Exp $");
 
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <signal.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <grp.h>
+#ifdef HAVE_PATHS_H
+# include <paths.h>
+#endif
+#include <pwd.h>
+#include <stdarg.h>
+#include <string.h>
+#include <termios.h>
 #ifdef HAVE_UTIL_H
 # include <util.h>
-#endif /* HAVE_UTIL_H */
+#endif
+#include <unistd.h>
 
 #include "sshpty.h"
 #include "log.h"
@@ -38,20 +54,21 @@ RCSID("$OpenBSD: sshpty.c,v 1.11 2004/01/11 21:55:06 deraadt Exp $");
  */
 
 int
-pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, int namebuflen)
+pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, size_t namebuflen)
 {
 	/* openpty(3) exists in OSF/1 and some other os'es */
-	char *name;
+	/*
+	 * ttyname() may fail due to different sshd code paths.  However,
+	 * we can just get the tty name from openpty() and avoid ttyname().
+	 */
+	char name[64];
 	int i;
 
-	i = openpty(ptyfd, ttyfd, NULL, NULL, NULL);
+	i = openpty(ptyfd, ttyfd, name, NULL, NULL);
 	if (i < 0) {
 		error("openpty: %.100s", strerror(errno));
 		return 0;
 	}
-	name = ttyname(*ttyfd);
-	if (!name)
-		fatal("openpty returns device for which ttyname fails.");
 
 	strlcpy(namebuf, name, namebuflen);	/* possible truncation */
 	return 1;
@@ -60,18 +77,18 @@ pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, int namebuflen)
 /* Releases the tty.  Its ownership is returned to root, and permissions to 0666. */
 
 void
-pty_release(const char *ttyname)
+pty_release(const char *tty)
 {
-	if (chown(ttyname, (uid_t) 0, (gid_t) 0) < 0)
-		error("chown %.100s 0 0 failed: %.100s", ttyname, strerror(errno));
-	if (chmod(ttyname, (mode_t) 0666) < 0)
-		error("chmod %.100s 0666 failed: %.100s", ttyname, strerror(errno));
+	if (chown(tty, (uid_t) 0, (gid_t) 0) < 0)
+		error("chown %.100s 0 0 failed: %.100s", tty, strerror(errno));
+	if (chmod(tty, (mode_t) 0666) < 0)
+		error("chmod %.100s 0666 failed: %.100s", tty, strerror(errno));
 }
 
 /* Makes the tty the process's controlling tty and sets it to sane modes. */
 
 void
-pty_make_controlling_tty(int *ttyfd, const char *ttyname)
+pty_make_controlling_tty(int *ttyfd, const char *tty)
 {
 	int fd;
 #ifdef USE_VHANGUP
@@ -82,7 +99,7 @@ pty_make_controlling_tty(int *ttyfd, const char *ttyname)
 	if (setsid() < 0)
 		error("setsid: %.100s", strerror(errno));
 
-	fd = open(ttyname, O_RDWR|O_NOCTTY);
+	fd = open(tty, O_RDWR|O_NOCTTY);
 	if (fd != -1) {
 		signal(SIGHUP, SIG_IGN);
 		ioctl(fd, TCVHUP, (char *)NULL);
@@ -97,7 +114,7 @@ pty_make_controlling_tty(int *ttyfd, const char *ttyname)
 	ioctl(*ttyfd, TCSETCTTY, NULL);
 	fd = open("/dev/tty", O_RDWR);
 	if (fd < 0)
-		error("%.100s: %.100s", ttyname, strerror(errno));
+		error("%.100s: %.100s", tty, strerror(errno));
 	close(*ttyfd);
 	*ttyfd = fd;
 #else /* _UNICOS */
@@ -128,18 +145,18 @@ pty_make_controlling_tty(int *ttyfd, const char *ttyname)
 	if (ioctl(*ttyfd, TIOCSCTTY, NULL) < 0)
 		error("ioctl(TIOCSCTTY): %.100s", strerror(errno));
 #endif /* TIOCSCTTY */
-#ifdef HAVE_NEWS4
+#ifdef NEED_SETPGRP
 	if (setpgrp(0,0) < 0)
 		error("SETPGRP %s",strerror(errno));
-#endif /* HAVE_NEWS4 */
+#endif /* NEED_SETPGRP */
 #ifdef USE_VHANGUP
 	old = signal(SIGHUP, SIG_IGN);
 	vhangup();
 	signal(SIGHUP, old);
 #endif /* USE_VHANGUP */
-	fd = open(ttyname, O_RDWR);
+	fd = open(tty, O_RDWR);
 	if (fd < 0) {
-		error("%.100s: %.100s", ttyname, strerror(errno));
+		error("%.100s: %.100s", tty, strerror(errno));
 	} else {
 #ifdef USE_VHANGUP
 		close(*ttyfd);
@@ -161,11 +178,12 @@ pty_make_controlling_tty(int *ttyfd, const char *ttyname)
 /* Changes the window size associated with the pty. */
 
 void
-pty_change_window_size(int ptyfd, int row, int col,
-	int xpixel, int ypixel)
+pty_change_window_size(int ptyfd, u_int row, u_int col,
+	u_int xpixel, u_int ypixel)
 {
 	struct winsize w;
 
+	/* may truncate u_int -> u_short */
 	w.ws_row = row;
 	w.ws_col = col;
 	w.ws_xpixel = xpixel;
@@ -174,7 +192,7 @@ pty_change_window_size(int ptyfd, int row, int col,
 }
 
 void
-pty_setowner(struct passwd *pw, const char *ttyname)
+pty_setowner(struct passwd *pw, const char *tty)
 {
 	struct group *grp;
 	gid_t gid;
@@ -196,33 +214,37 @@ pty_setowner(struct passwd *pw, const char *ttyname)
 	 * Warn but continue if filesystem is read-only and the uids match/
 	 * tty is owned by root.
 	 */
-	if (stat(ttyname, &st))
-		fatal("stat(%.100s) failed: %.100s", ttyname,
+	if (stat(tty, &st))
+		fatal("stat(%.100s) failed: %.100s", tty,
 		    strerror(errno));
 
+#ifdef WITH_SELINUX
+	ssh_selinux_setup_pty(pw->pw_name, tty);
+#endif
+
 	if (st.st_uid != pw->pw_uid || st.st_gid != gid) {
-		if (chown(ttyname, pw->pw_uid, gid) < 0) {
+		if (chown(tty, pw->pw_uid, gid) < 0) {
 			if (errno == EROFS &&
 			    (st.st_uid == pw->pw_uid || st.st_uid == 0))
 				debug("chown(%.100s, %u, %u) failed: %.100s",
-				    ttyname, (u_int)pw->pw_uid, (u_int)gid,
+				    tty, (u_int)pw->pw_uid, (u_int)gid,
 				    strerror(errno));
 			else
 				fatal("chown(%.100s, %u, %u) failed: %.100s",
-				    ttyname, (u_int)pw->pw_uid, (u_int)gid,
+				    tty, (u_int)pw->pw_uid, (u_int)gid,
 				    strerror(errno));
 		}
 	}
 
 	if ((st.st_mode & (S_IRWXU|S_IRWXG|S_IRWXO)) != mode) {
-		if (chmod(ttyname, mode) < 0) {
+		if (chmod(tty, mode) < 0) {
 			if (errno == EROFS &&
 			    (st.st_mode & (S_IRGRP | S_IROTH)) == 0)
 				debug("chmod(%.100s, 0%o) failed: %.100s",
-				    ttyname, (u_int)mode, strerror(errno));
+				    tty, (u_int)mode, strerror(errno));
 			else
 				fatal("chmod(%.100s, 0%o) failed: %.100s",
-				    ttyname, (u_int)mode, strerror(errno));
+				    tty, (u_int)mode, strerror(errno));
 		}
 	}
 }

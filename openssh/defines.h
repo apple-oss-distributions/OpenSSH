@@ -25,12 +25,12 @@
 #ifndef _DEFINES_H
 #define _DEFINES_H
 
-/* $Id: defines.h,v 1.115 2004/04/14 07:24:30 dtucker Exp $ */
+/* $Id: defines.h,v 1.138 2006/09/21 13:13:30 dtucker Exp $ */
 
 
 /* Constants */
 
-#ifndef SHUT_RDWR
+#if defined(HAVE_DECL_SHUT_RD) && HAVE_DECL_SHUT_RD == 0
 enum
 {
   SHUT_RD = 0,		/* No more receptions.  */
@@ -54,9 +54,23 @@ enum
 # ifdef PATH_MAX
 #  define MAXPATHLEN PATH_MAX
 # else /* PATH_MAX */
-#  define MAXPATHLEN 64 /* Should be safe */
+#  define MAXPATHLEN 64
+/* realpath uses a fixed buffer of size MAXPATHLEN, so force use of ours */
+#  ifndef BROKEN_REALPATH
+#   define BROKEN_REALPATH 1
+#  endif /* BROKEN_REALPATH */
 # endif /* PATH_MAX */
 #endif /* MAXPATHLEN */
+
+#ifndef PATH_MAX
+# ifdef _POSIX_PATH_MAX
+# define PATH_MAX _POSIX_PATH_MAX
+# endif
+#endif
+
+#ifndef MAXSYMLINKS
+# define MAXSYMLINKS 5
+#endif
 
 #ifndef STDIN_FILENO
 # define STDIN_FILENO    0
@@ -76,8 +90,8 @@ enum
 #endif
 #endif
 
-#ifndef O_NONBLOCK	/* Non Blocking Open */
-# define O_NONBLOCK      00004
+#if defined(HAVE_DECL_O_NONBLOCK) && HAVE_DECL_O_NONBLOCK == 0
+# define O_NONBLOCK      00004	/* Non Blocking Open */
 #endif
 
 #ifndef S_ISDIR
@@ -129,15 +143,10 @@ including rpc/rpc.h breaks Solaris 6
 #define INADDR_LOOPBACK ((u_long)0x7f000001)
 #endif
 
-#ifndef __unused
-#define __unused
-#endif
-
 /* Types */
 
 /* If sys/types.h does not supply intXX_t, supply them ourselves */
 /* (or die trying) */
-
 
 #ifndef HAVE_U_INT
 typedef unsigned int u_int;
@@ -288,6 +297,10 @@ struct	sockaddr_un {
 };
 #endif /* HAVE_SYS_UN_H */
 
+#ifndef HAVE_IN_ADDR_T
+typedef u_int32_t	in_addr_t;
+#endif
+
 #if defined(BROKEN_SYS_TERMIO_H) && !defined(_STRUCT_WINSIZE)
 #define _STRUCT_WINSIZE
 struct winsize {
@@ -424,6 +437,18 @@ struct winsize {
 # define __attribute__(x)
 #endif /* !defined(__GNUC__) || (__GNUC__ < 2) */
 
+#ifndef __dead
+# define __dead	__attribute__((noreturn))
+#endif
+
+#if !defined(HAVE_ATTRIBUTE__SENTINEL__) && !defined(__sentinel__)
+# define __sentinel__
+#endif
+
+#if !defined(HAVE_ATTRIBUTE__BOUNDED__) && !defined(__bounded__)
+# define __bounded__(x, y, z)
+#endif
+
 /* *-*-nto-qnx doesn't define this macro in the system headers */
 #ifdef MISSING_HOWMANY
 # define howmany(x,y)	(((x)+((y)-1))/(y))
@@ -462,6 +487,25 @@ struct winsize {
 	 (struct cmsghdr *)NULL)
 #endif /* CMSG_FIRSTHDR */
 
+#ifndef offsetof
+# define offsetof(type, member) ((size_t) &((type *)0)->member)
+#endif
+
+/* Set up BSD-style BYTE_ORDER definition if it isn't there already */
+/* XXX: doesn't try to cope with strange byte orders (PDP_ENDIAN) */
+#ifndef BYTE_ORDER
+# ifndef LITTLE_ENDIAN
+#  define LITTLE_ENDIAN  1234
+# endif /* LITTLE_ENDIAN */
+# ifndef BIG_ENDIAN
+#  define BIG_ENDIAN     4321
+# endif /* BIG_ENDIAN */
+# ifdef WORDS_BIGENDIAN
+#  define BYTE_ORDER BIG_ENDIAN
+# else /* WORDS_BIGENDIAN */
+#  define BYTE_ORDER LITTLE_ENDIAN
+# endif /* WORDS_BIGENDIAN */
+#endif /* BYTE_ORDER */
 
 /* Function replacement / compatibility hacks */
 
@@ -484,19 +528,6 @@ struct winsize {
 # define optarg             BSDoptarg
 #endif
 
-/* In older versions of libpam, pam_strerror takes a single argument */
-#ifdef HAVE_OLD_PAM
-# define PAM_STRERROR(a,b) pam_strerror((b))
-#else
-# define PAM_STRERROR(a,b) pam_strerror((a),(b))
-#endif
-
-#ifdef PAM_SUN_CODEBASE
-# define PAM_MSG_MEMBER(msg, n, member) ((*(msg))[(n)].member)
-#else
-# define PAM_MSG_MEMBER(msg, n, member) ((msg)[(n)]->member)
-#endif
-
 #if defined(BROKEN_GETADDRINFO) && defined(HAVE_GETADDRINFO)
 # undef HAVE_GETADDRINFO
 #endif
@@ -511,6 +542,11 @@ struct winsize {
 # undef HAVE_UPDWTMPX
 #endif
 
+#if defined(HAVE_OPENLOG_R) && defined(SYSLOG_DATA_INIT) && \
+    defined(SYSLOG_R_SAFE_IN_SIGHAND)
+# define DO_LOG_SAFE_IN_SIGHAND
+#endif
+
 #if !defined(HAVE_MEMMOVE) && defined(HAVE_BCOPY)
 # define memmove(s1, s2, n) bcopy((s2), (s1), (n))
 #endif /* !defined(HAVE_MEMMOVE) && defined(HAVE_BCOPY) */
@@ -520,7 +556,13 @@ struct winsize {
 #endif /* defined(HAVE_VHANGUP) && !defined(HAVE_DEV_PTMX) */
 
 #ifndef GETPGRP_VOID
+# include <unistd.h>
 # define getpgrp() getpgrp(0)
+#endif
+
+#ifdef USE_BSM_AUDIT
+# define SSH_AUDIT_EVENTS
+# define CUSTOM_SSH_AUDIT_EVENTS
 #endif
 
 /* OPENSSL_free() is Free() in versions before OpenSSL 0.9.6 */
@@ -551,6 +593,23 @@ struct winsize {
 # define SSH_SYSFDMAX 10000
 #endif
 
+#if defined(__Lynx__)
+ /*
+  * LynxOS defines these in param.h which we do not want to include since
+  * it will also pull in a bunch of kernel definitions.
+  */
+# define ALIGNBYTES (sizeof(int) - 1)
+# define ALIGN(p) (((unsigned)p + ALIGNBYTES) & ~ALIGNBYTES)
+  /* Missing prototypes on LynxOS */
+  int snprintf (char *, size_t, const char *, ...);
+  int mkstemp (char *);
+  char *crypt (const char *, const char *);
+  int seteuid (uid_t);
+  int setegid (gid_t);
+  char *mkdtemp (char *);
+  int rresvport_af (int *, sa_family_t);
+  int innetgr (const char *, const char *, const char *, const char *);
+#endif
 
 /*
  * Define this to use pipes instead of socketpairs for communicating with the
@@ -637,6 +696,37 @@ struct winsize {
 # define CUSTOM_SYS_AUTH_PASSWD 1
 #endif
 
+#ifdef HAVE_LIBIAF
+# define CUSTOM_SYS_AUTH_PASSWD 1
+#endif
+
+/* HP-UX 11.11 */
+#ifdef BTMP_FILE
+# define _PATH_BTMP BTMP_FILE
+#endif
+
+#if defined(USE_BTMP) && defined(_PATH_BTMP)
+# define CUSTOM_FAILED_LOGIN
+#endif
+
 /** end of login recorder definitions */
+
+#ifdef BROKEN_GETGROUPS
+# define getgroups(a,b) ((a)==0 && (b)==NULL ? NGROUPS_MAX : getgroups((a),(b)))
+#endif
+
+#if defined(HAVE_MMAP) && defined(BROKEN_MMAP)
+# undef HAVE_MMAP
+#endif
+
+#ifndef IOV_MAX
+# if defined(_XOPEN_IOV_MAX)
+#  define	IOV_MAX		_XOPEN_IOV_MAX
+# elif defined(DEF_IOV_MAX)
+#  define	IOV_MAX		DEF_IOV_MAX
+# else
+#  define	IOV_MAX		16
+# endif
+#endif
 
 #endif /* _DEFINES_H */

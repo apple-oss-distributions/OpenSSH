@@ -1,3 +1,4 @@
+/* $OpenBSD: cipher.c,v 1.81 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -35,33 +36,20 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: cipher.c,v 1.68 2004/01/23 19:26:33 hshoexer Exp $");
+
+#include <sys/types.h>
+
+#include <openssl/md5.h>
+
+#include <string.h>
+#include <stdarg.h>
 
 #include "xmalloc.h"
 #include "log.h"
 #include "cipher.h"
 
-#include <openssl/md5.h>
-
-#if OPENSSL_VERSION_NUMBER < 0x00906000L
-#define SSH_OLD_EVP
-#define EVP_CIPHER_CTX_get_app_data(e)          ((e)->app_data)
-#endif
-
-#if OPENSSL_VERSION_NUMBER < 0x00907000L
-extern const EVP_CIPHER *evp_rijndael(void);
-extern void ssh_rijndael_iv(EVP_CIPHER_CTX *, int, u_char *, u_int);
-#endif
-
-#if !defined(EVP_CTRL_SET_ACSS_MODE)
-# if (OPENSSL_VERSION_NUMBER >= 0x00907000L)
-extern const EVP_CIPHER *evp_acss(void);
-#  define EVP_acss evp_acss
-#  define EVP_CTRL_SET_ACSS_MODE xxx	/* used below */
-# else
-#  define EVP_acss NULL /* Don't try to support ACSS on older OpenSSL */
-# endif /* (OPENSSL_VERSION_NUMBER >= 0x00906000L) */
-#endif /* !defined(EVP_CTRL_SET_ACSS_MODE) */
+/* compatibility with old or broken OpenSSL versions */
+#include "openbsd-compat/openssl-compat.h"
 
 extern const EVP_CIPHER *evp_ssh1_bf(void);
 extern const EVP_CIPHER *evp_ssh1_3des(void);
@@ -74,39 +62,32 @@ struct Cipher {
 	int	number;		/* for ssh1 only */
 	u_int	block_size;
 	u_int	key_len;
+	u_int	discard_len;
 	const EVP_CIPHER	*(*evptype)(void);
 } ciphers[] = {
-	{ "none", 		SSH_CIPHER_NONE, 8, 0, EVP_enc_null },
-	{ "des", 		SSH_CIPHER_DES, 8, 8, EVP_des_cbc },
-	{ "3des", 		SSH_CIPHER_3DES, 8, 16, evp_ssh1_3des },
-	{ "blowfish", 		SSH_CIPHER_BLOWFISH, 8, 32, evp_ssh1_bf },
+	{ "none",		SSH_CIPHER_NONE, 8, 0, 0, EVP_enc_null },
+	{ "des",		SSH_CIPHER_DES, 8, 8, 0, EVP_des_cbc },
+	{ "3des",		SSH_CIPHER_3DES, 8, 16, 0, evp_ssh1_3des },
+	{ "blowfish",		SSH_CIPHER_BLOWFISH, 8, 32, 0, evp_ssh1_bf },
 
-	{ "3des-cbc", 		SSH_CIPHER_SSH2, 8, 24, EVP_des_ede3_cbc },
-	{ "blowfish-cbc", 	SSH_CIPHER_SSH2, 8, 16, EVP_bf_cbc },
-	{ "cast128-cbc", 	SSH_CIPHER_SSH2, 8, 16, EVP_cast5_cbc },
-	{ "arcfour", 		SSH_CIPHER_SSH2, 8, 16, EVP_rc4 },
-#if OPENSSL_VERSION_NUMBER < 0x00907000L
-	{ "aes128-cbc", 	SSH_CIPHER_SSH2, 16, 16, evp_rijndael },
-	{ "aes192-cbc", 	SSH_CIPHER_SSH2, 16, 24, evp_rijndael },
-	{ "aes256-cbc", 	SSH_CIPHER_SSH2, 16, 32, evp_rijndael },
+	{ "3des-cbc",		SSH_CIPHER_SSH2, 8, 24, 0, EVP_des_ede3_cbc },
+	{ "blowfish-cbc",	SSH_CIPHER_SSH2, 8, 16, 0, EVP_bf_cbc },
+	{ "cast128-cbc",	SSH_CIPHER_SSH2, 8, 16, 0, EVP_cast5_cbc },
+	{ "arcfour",		SSH_CIPHER_SSH2, 8, 16, 0, EVP_rc4 },
+	{ "arcfour128",		SSH_CIPHER_SSH2, 8, 16, 1536, EVP_rc4 },
+	{ "arcfour256",		SSH_CIPHER_SSH2, 8, 32, 1536, EVP_rc4 },
+	{ "aes128-cbc",		SSH_CIPHER_SSH2, 16, 16, 0, EVP_aes_128_cbc },
+	{ "aes192-cbc",		SSH_CIPHER_SSH2, 16, 24, 0, EVP_aes_192_cbc },
+	{ "aes256-cbc",		SSH_CIPHER_SSH2, 16, 32, 0, EVP_aes_256_cbc },
 	{ "rijndael-cbc@lysator.liu.se",
-				SSH_CIPHER_SSH2, 16, 32, evp_rijndael },
-#else
-	{ "aes128-cbc",		SSH_CIPHER_SSH2, 16, 16, EVP_aes_128_cbc },
-	{ "aes192-cbc",		SSH_CIPHER_SSH2, 16, 24, EVP_aes_192_cbc },
-	{ "aes256-cbc",		SSH_CIPHER_SSH2, 16, 32, EVP_aes_256_cbc },
-	{ "rijndael-cbc@lysator.liu.se",
-				SSH_CIPHER_SSH2, 16, 32, EVP_aes_256_cbc },
+				SSH_CIPHER_SSH2, 16, 32, 0, EVP_aes_256_cbc },
+	{ "aes128-ctr",		SSH_CIPHER_SSH2, 16, 16, 0, evp_aes_128_ctr },
+	{ "aes192-ctr",		SSH_CIPHER_SSH2, 16, 24, 0, evp_aes_128_ctr },
+	{ "aes256-ctr",		SSH_CIPHER_SSH2, 16, 32, 0, evp_aes_128_ctr },
+#ifdef USE_CIPHER_ACSS
+	{ "acss@openssh.org",	SSH_CIPHER_SSH2, 16, 5, 0, EVP_acss },
 #endif
-#if OPENSSL_VERSION_NUMBER >= 0x00905000L
-	{ "aes128-ctr", 	SSH_CIPHER_SSH2, 16, 16, evp_aes_128_ctr },
-	{ "aes192-ctr", 	SSH_CIPHER_SSH2, 16, 24, evp_aes_128_ctr },
-	{ "aes256-ctr", 	SSH_CIPHER_SSH2, 16, 32, evp_aes_128_ctr },
-#endif
-#if defined(EVP_CTRL_SET_ACSS_MODE)
-	{ "acss@openssh.org",	SSH_CIPHER_SSH2, 16, 5, EVP_acss },
-#endif
-	{ NULL,			SSH_CIPHER_ILLEGAL, 0, 0, NULL }
+	{ NULL,			SSH_CIPHER_INVALID, 0, 0, 0, NULL }
 };
 
 /*--*/
@@ -146,7 +127,7 @@ cipher_by_name(const char *name)
 {
 	Cipher *c;
 	for (c = ciphers; c->name != NULL; c++)
-		if (strcasecmp(c->name, name) == 0)
+		if (strcmp(c->name, name) == 0)
 			return c;
 	return NULL;
 }
@@ -166,25 +147,25 @@ int
 ciphers_valid(const char *names)
 {
 	Cipher *c;
-	char *ciphers, *cp;
+	char *cipher_list, *cp;
 	char *p;
 
 	if (names == NULL || strcmp(names, "") == 0)
 		return 0;
-	ciphers = cp = xstrdup(names);
+	cipher_list = cp = xstrdup(names);
 	for ((p = strsep(&cp, CIPHER_SEP)); p && *p != '\0';
 	    (p = strsep(&cp, CIPHER_SEP))) {
 		c = cipher_by_name(p);
 		if (c == NULL || c->number != SSH_CIPHER_SSH2) {
 			debug("bad cipher %s [%s]", p, names);
-			xfree(ciphers);
+			xfree(cipher_list);
 			return 0;
 		} else {
 			debug3("cipher ok: %s [%s]", p, names);
 		}
 	}
 	debug3("ciphers ok: [%s]", names);
-	xfree(ciphers);
+	xfree(cipher_list);
 	return 1;
 }
 
@@ -199,8 +180,10 @@ cipher_number(const char *name)
 	Cipher *c;
 	if (name == NULL)
 		return -1;
-	c = cipher_by_name(name);
-	return (c==NULL) ? -1 : c->number;
+	for (c = ciphers; c->name != NULL; c++)
+		if (strcasecmp(c->name, name) == 0)
+			return c->number;
+	return -1;
 }
 
 char *
@@ -213,15 +196,16 @@ cipher_name(int id)
 void
 cipher_init(CipherContext *cc, Cipher *cipher,
     const u_char *key, u_int keylen, const u_char *iv, u_int ivlen,
-    int encrypt)
+    int do_encrypt)
 {
 	static int dowarn = 1;
 #ifdef SSH_OLD_EVP
 	EVP_CIPHER *type;
 #else
 	const EVP_CIPHER *type;
-#endif
 	int klen;
+#endif
+	u_char *junk, *discard;
 
 	if (cipher->number == SSH_CIPHER_DES) {
 		if (dowarn) {
@@ -252,14 +236,14 @@ cipher_init(CipherContext *cc, Cipher *cipher,
 		type->key_len = keylen;
 	}
 	EVP_CipherInit(&cc->evp, type, (u_char *)key, (u_char *)iv,
-	    (encrypt == CIPHER_ENCRYPT));
+	    (do_encrypt == CIPHER_ENCRYPT));
 #else
 	if (EVP_CipherInit(&cc->evp, type, NULL, (u_char *)iv,
-	    (encrypt == CIPHER_ENCRYPT)) == 0)
+	    (do_encrypt == CIPHER_ENCRYPT)) == 0)
 		fatal("cipher_init: EVP_CipherInit failed for %s",
 		    cipher->name);
 	klen = EVP_CIPHER_CTX_key_length(&cc->evp);
-	if (klen > 0 && keylen != klen) {
+	if (klen > 0 && keylen != (u_int)klen) {
 		debug2("cipher_init: set keylen (%d -> %d)", klen, keylen);
 		if (EVP_CIPHER_CTX_set_key_length(&cc->evp, keylen) == 0)
 			fatal("cipher_init: set keylen failed (%d -> %d)",
@@ -269,6 +253,17 @@ cipher_init(CipherContext *cc, Cipher *cipher,
 		fatal("cipher_init: EVP_CipherInit: set key failed for %s",
 		    cipher->name);
 #endif
+
+	if (cipher->discard_len > 0) {
+		junk = xmalloc(cipher->discard_len);
+		discard = xmalloc(cipher->discard_len);
+		if (EVP_Cipher(&cc->evp, discard, junk,
+		    cipher->discard_len) == 0)
+			fatal("evp_crypt: EVP_Cipher failed during discard");
+		memset(discard, 0, cipher->discard_len);
+		xfree(junk);
+		xfree(discard);
+	}
 }
 
 void
@@ -276,23 +271,15 @@ cipher_crypt(CipherContext *cc, u_char *dest, const u_char *src, u_int len)
 {
 	if (len % cc->cipher->block_size)
 		fatal("cipher_encrypt: bad plaintext length %d", len);
-#ifdef SSH_OLD_EVP
-	EVP_Cipher(&cc->evp, dest, (u_char *)src, len);
-#else
 	if (EVP_Cipher(&cc->evp, dest, (u_char *)src, len) == 0)
 		fatal("evp_crypt: EVP_Cipher failed");
-#endif
 }
 
 void
 cipher_cleanup(CipherContext *cc)
 {
-#ifdef SSH_OLD_EVP
-	EVP_CIPHER_CTX_cleanup(&cc->evp);
-#else
 	if (EVP_CIPHER_CTX_cleanup(&cc->evp) == 0)
 		error("cipher_cleanup: EVP_CIPHER_CTX_cleanup failed");
-#endif
 }
 
 /*
@@ -302,7 +289,7 @@ cipher_cleanup(CipherContext *cc)
 
 void
 cipher_set_key_string(CipherContext *cc, Cipher *cipher,
-    const char *passphrase, int encrypt)
+    const char *passphrase, int do_encrypt)
 {
 	MD5_CTX md;
 	u_char digest[16];
@@ -311,7 +298,7 @@ cipher_set_key_string(CipherContext *cc, Cipher *cipher,
 	MD5_Update(&md, (const u_char *)passphrase, strlen(passphrase));
 	MD5_Final(digest, &md);
 
-	cipher_init(cc, cipher, digest, 16, NULL, 0, encrypt);
+	cipher_init(cc, cipher, digest, 16, NULL, 0, do_encrypt);
 
 	memset(digest, 0, sizeof(digest));
 	memset(&md, 0, sizeof(md));
@@ -347,12 +334,12 @@ cipher_get_keyiv(CipherContext *cc, u_char *iv, u_int len)
 	case SSH_CIPHER_DES:
 	case SSH_CIPHER_BLOWFISH:
 		evplen = EVP_CIPHER_CTX_iv_length(&cc->evp);
-		if (evplen == 0)
+		if (evplen <= 0)
 			return;
-		if (evplen != len)
+		if ((u_int)evplen != len)
 			fatal("%s: wrong iv length %d != %d", __func__,
 			    evplen, len);
-#if OPENSSL_VERSION_NUMBER < 0x00907000L
+#ifdef USE_BUILTIN_RIJNDAEL
 		if (c->evptype == evp_rijndael)
 			ssh_rijndael_iv(&cc->evp, 0, iv, len);
 		else
@@ -383,7 +370,7 @@ cipher_set_keyiv(CipherContext *cc, u_char *iv)
 		evplen = EVP_CIPHER_CTX_iv_length(&cc->evp);
 		if (evplen == 0)
 			return;
-#if OPENSSL_VERSION_NUMBER < 0x00907000L
+#ifdef USE_BUILTIN_RIJNDAEL
 		if (c->evptype == evp_rijndael)
 			ssh_rijndael_iv(&cc->evp, 1, iv, evplen);
 		else

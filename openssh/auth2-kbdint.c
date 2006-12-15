@@ -1,3 +1,4 @@
+/* $OpenBSD: auth2-kbdint.c,v 1.5 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -23,14 +24,19 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth2-kbdint.c,v 1.2 2002/05/31 11:35:15 markus Exp $");
 
+#include <sys/types.h>
+
+#include <stdarg.h>
+
+#include "xmalloc.h"
 #include "packet.h"
+#include "key.h"
+#include "hostfile.h"
 #include "auth.h"
 #include "log.h"
-#include "monitor_wrap.h"
+#include "buffer.h"
 #include "servconf.h"
-#include "xmalloc.h"
 
 /* import */
 extern ServerOptions options;
@@ -56,11 +62,6 @@ userauth_kbdint(Authctxt *authctxt)
 	if (check_nt_auth(0, authctxt->pw) == 0)
 		authenticated = 0;
 #endif
-#if defined(HAVE_BSM_AUDIT_H) && defined(HAVE_LIBBSM)
-	if (!authenticated) {
-		PRIVSEP(solaris_audit_bad_pw("interactive password entry"));
-	}
-#endif /* BSM */
 	return authenticated;
 }
 

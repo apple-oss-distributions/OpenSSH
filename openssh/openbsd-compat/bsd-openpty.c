@@ -35,6 +35,21 @@
 #include "includes.h"
 #if !defined(HAVE_OPENPTY)
 
+#include <sys/types.h>
+
+#include <stdlib.h>
+
+#ifdef HAVE_SYS_STAT_H
+# include <sys/stat.h>
+#endif
+#ifdef HAVE_SYS_IOCTL_H
+# include <sys/ioctl.h>
+#endif
+
+#ifdef HAVE_FCNTL_H
+# include <fcntl.h>
+#endif
+
 #ifdef HAVE_UTIL_H
 # include <util.h>
 #endif /* HAVE_UTIL_H */
@@ -45,6 +60,10 @@
 #if defined(HAVE_DEV_PTMX) && defined(HAVE_SYS_STROPTS_H)
 # include <sys/stropts.h>
 #endif
+
+#include <signal.h>
+#include <string.h>
+#include <unistd.h>
 
 #ifndef O_NOCTTY
 #define O_NOCTTY 0
@@ -102,7 +121,6 @@ openpty(int *amaster, int *aslave, char *name, struct termios *termp,
 		return (-1);
 	}
 
-#ifndef HAVE_CYGWIN
 	/*
 	 * Try to push the appropriate streams modules, as described 
 	 * in Solaris pts(7).
@@ -112,7 +130,6 @@ openpty(int *amaster, int *aslave, char *name, struct termios *termp,
 # ifndef __hpux
 	ioctl(*aslave, I_PUSH, "ttcompat");
 # endif /* __hpux */
-#endif /* HAVE_CYGWIN */
 
 	return (0);
 

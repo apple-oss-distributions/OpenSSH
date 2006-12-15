@@ -1,3 +1,4 @@
+/* $OpenBSD: monitor_mm.c,v 1.15 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
@@ -24,14 +25,20 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: monitor_mm.c,v 1.8 2002/08/02 14:43:15 millert Exp $");
 
+#include <sys/types.h>
 #ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
+#include <sys/param.h>
+#include "openbsd-compat/sys-tree.h"
 
-#include "ssh.h"
+#include <errno.h>
+#include <stdarg.h>
+#include <string.h>
+
 #include "xmalloc.h"
+#include "ssh.h"
 #include "log.h"
 #include "monitor_mm.h"
 
@@ -92,7 +99,7 @@ mm_create(struct mm_master *mmalloc, size_t size)
 	mm->mmalloc = mmalloc;
 
 	address = xmmap(size);
-	if (address == MAP_FAILED)
+	if (address == (void *)MAP_FAILED)
 		fatal("mmap(%lu): %s", (u_long)size, strerror(errno));
 
 	mm->address = address;

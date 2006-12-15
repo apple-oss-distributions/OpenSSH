@@ -1,4 +1,4 @@
-/*	$OpenBSD: sshpty.h,v 1.4 2002/03/04 17:27:39 stevesk Exp $	*/
+/* $OpenBSD: sshpty.h,v 1.10 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -14,13 +14,14 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#ifndef SSHPTY_H
-#define SSHPTY_H
+#include <termios.h>
 
-int	 pty_allocate(int *, int *, char *, int);
+struct termios get_saved_tio(void);
+void	 leave_raw_mode(void);
+void	 enter_raw_mode(void);
+
+int	 pty_allocate(int *, int *, char *, size_t);
 void	 pty_release(const char *);
 void	 pty_make_controlling_tty(int *, const char *);
-void	 pty_change_window_size(int, int, int, int, int);
+void	 pty_change_window_size(int, u_int, u_int, u_int, u_int);
 void	 pty_setowner(struct passwd *, const char *);
-
-#endif				/* SSHPTY_H */

@@ -1,3 +1,4 @@
+/* $OpenBSD: canohost.c,v 1.61 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -12,15 +13,27 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: canohost.c,v 1.38 2003/09/23 20:17:11 markus Exp $");
 
-#include "packet.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include <ctype.h>
+#include <errno.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+
 #include "xmalloc.h"
+#include "packet.h"
 #include "log.h"
 #include "canohost.h"
 
 static void check_ip_options(int, char *);
-static void ipv64_normalise_mapped(struct sockaddr_storage *, socklen_t *);
 
 /*
  * Return the canonical name of the host at the other end of the socket. The
@@ -28,7 +41,7 @@ static void ipv64_normalise_mapped(struct sockaddr_storage *, socklen_t *);
  */
 
 static char *
-get_remote_hostname(int socket, int use_dns)
+get_remote_hostname(int sock, int use_dns)
 {
 	struct sockaddr_storage from;
 	int i;
@@ -39,13 +52,13 @@ get_remote_hostname(int socket, int use_dns)
 	/* Get IP address of client. */
 	fromlen = sizeof(from);
 	memset(&from, 0, sizeof(from));
-	if (getpeername(socket, (struct sockaddr *)&from, &fromlen) < 0) {
+	if (getpeername(sock, (struct sockaddr *)&from, &fromlen) < 0) {
 		debug("getpeername failed: %.100s", strerror(errno));
 		cleanup_exit(255);
 	}
 
 	if (from.ss_family == AF_INET)
-		check_ip_options(socket, ntop);
+		check_ip_options(sock, ntop);
 
 	ipv64_normalise_mapped(&from, &fromlen);
 
@@ -88,7 +101,7 @@ get_remote_hostname(int socket, int use_dns)
 	 */
 	for (i = 0; name[i]; i++)
 		if (isupper(name[i]))
-			name[i] = tolower(name[i]);
+			name[i] = (char)tolower(name[i]);
 	/*
 	 * Map it back to an IP address and check that the given
 	 * address actually is an address of this host.  This is
@@ -103,7 +116,7 @@ get_remote_hostname(int socket, int use_dns)
 	hints.ai_socktype = SOCK_STREAM;
 	if (getaddrinfo(name, NULL, &hints, &aitop) != 0) {
 		logit("reverse mapping checking getaddrinfo for %.700s "
-		    "failed - POSSIBLE BREAKIN ATTEMPT!", name);
+		    "[%s] failed - POSSIBLE BREAK-IN ATTEMPT!", name, ntop);
 		return xstrdup(ntop);
 	}
 	/* Look for the address from the list of addresses. */
@@ -118,7 +131,7 @@ get_remote_hostname(int socket, int use_dns)
 	if (!ai) {
 		/* Address not found for the host name. */
 		logit("Address %.100s maps to %.600s, but this does not "
-		    "map back to the address - POSSIBLE BREAKIN ATTEMPT!",
+		    "map back to the address - POSSIBLE BREAK-IN ATTEMPT!",
 		    ntop, name);
 		return xstrdup(ntop);
 	}
@@ -138,13 +151,14 @@ get_remote_hostname(int socket, int use_dns)
  */
 /* IPv4 only */
 static void
-check_ip_options(int socket, char *ipaddr)
+check_ip_options(int sock, char *ipaddr)
 {
 #ifdef IP_OPTIONS
 	u_char options[200];
 	char text[sizeof(options) * 3 + 1];
 	socklen_t option_size;
-	int i, ipproto;
+	u_int i;
+	int ipproto;
 	struct protoent *ip;
 
 	if ((ip = getprotobyname("ip")) != NULL)
@@ -152,21 +166,19 @@ check_ip_options(int socket, char *ipaddr)
 	else
 		ipproto = IPPROTO_IP;
 	option_size = sizeof(options);
-	if (getsockopt(socket, ipproto, IP_OPTIONS, options,
+	if (getsockopt(sock, ipproto, IP_OPTIONS, options,
 	    &option_size) >= 0 && option_size != 0) {
 		text[0] = '\0';
 		for (i = 0; i < option_size; i++)
 			snprintf(text + i*3, sizeof(text) - i*3,
 			    " %2.2x", options[i]);
-		logit("Connection from %.100s with IP options:%.800s",
-		    ipaddr, text);
-		packet_disconnect("Connection from %.100s with IP options:%.800s",
+		fatal("Connection from %.100s with IP options:%.800s",
 		    ipaddr, text);
 	}
 #endif /* IP_OPTIONS */
 }
 
-static void
+void
 ipv64_normalise_mapped(struct sockaddr_storage *addr, socklen_t *len)
 {
 	struct sockaddr_in6 *a6 = (struct sockaddr_in6 *)addr;
@@ -174,7 +186,7 @@ ipv64_normalise_mapped(struct sockaddr_storage *addr, socklen_t *len)
 	struct in_addr inaddr;
 	u_int16_t port;
 
-	if (addr->ss_family != AF_INET6 || 
+	if (addr->ss_family != AF_INET6 ||
 	    !IN6_IS_ADDR_V4MAPPED(&a6->sin6_addr))
 		return;
 
@@ -200,26 +212,27 @@ ipv64_normalise_mapped(struct sockaddr_storage *addr, socklen_t *len)
 const char *
 get_canonical_hostname(int use_dns)
 {
+	char *host;
 	static char *canonical_host_name = NULL;
-	static int use_dns_done = 0;
+	static char *remote_ip = NULL;
 
 	/* Check if we have previously retrieved name with same option. */
-	if (canonical_host_name != NULL) {
-		if (use_dns_done != use_dns)
-			xfree(canonical_host_name);
-		else
-			return canonical_host_name;
-	}
+	if (use_dns && canonical_host_name != NULL)
+		return canonical_host_name;
+	if (!use_dns && remote_ip != NULL)
+		return remote_ip;
 
 	/* Get the real hostname if socket; otherwise return UNKNOWN. */
 	if (packet_connection_is_on_socket())
-		canonical_host_name = get_remote_hostname(
-		    packet_get_connection_in(), use_dns);
+		host = get_remote_hostname(packet_get_connection_in(), use_dns);
 	else
-		canonical_host_name = xstrdup("UNKNOWN");
+		host = "UNKNOWN";
 
-	use_dns_done = use_dns;
-	return canonical_host_name;
+	if (use_dns)
+		canonical_host_name = host;
+	else
+		remote_ip = host;
+	return host;
 }
 
 /*
@@ -227,22 +240,23 @@ get_canonical_hostname(int use_dns)
  * The returned string must be freed.
  */
 static char *
-get_socket_address(int socket, int remote, int flags)
+get_socket_address(int sock, int remote, int flags)
 {
 	struct sockaddr_storage addr;
 	socklen_t addrlen;
 	char ntop[NI_MAXHOST];
+	int r;
 
 	/* Get IP address of client. */
 	addrlen = sizeof(addr);
 	memset(&addr, 0, sizeof(addr));
 
 	if (remote) {
-		if (getpeername(socket, (struct sockaddr *)&addr, &addrlen)
+		if (getpeername(sock, (struct sockaddr *)&addr, &addrlen)
 		    < 0)
 			return NULL;
 	} else {
-		if (getsockname(socket, (struct sockaddr *)&addr, &addrlen)
+		if (getsockname(sock, (struct sockaddr *)&addr, &addrlen)
 		    < 0)
 			return NULL;
 	}
@@ -251,39 +265,42 @@ get_socket_address(int socket, int remote, int flags)
 	if (addr.ss_family == AF_INET6)
 		addrlen = sizeof(struct sockaddr_in6);
 
+	ipv64_normalise_mapped(&addr, &addrlen);
+
 	/* Get the address in ascii. */
-	if (getnameinfo((struct sockaddr *)&addr, addrlen, ntop, sizeof(ntop),
-	    NULL, 0, flags) != 0) {
-		error("get_socket_address: getnameinfo %d failed", flags);
+	if ((r = getnameinfo((struct sockaddr *)&addr, addrlen, ntop,
+	    sizeof(ntop), NULL, 0, flags)) != 0) {
+		error("get_socket_address: getnameinfo %d failed: %s", flags,
+		    r == EAI_SYSTEM ? strerror(errno) : gai_strerror(r));
 		return NULL;
 	}
 	return xstrdup(ntop);
 }
 
 char *
-get_peer_ipaddr(int socket)
+get_peer_ipaddr(int sock)
 {
 	char *p;
 
-	if ((p = get_socket_address(socket, 1, NI_NUMERICHOST)) != NULL)
+	if ((p = get_socket_address(sock, 1, NI_NUMERICHOST)) != NULL)
 		return p;
 	return xstrdup("UNKNOWN");
 }
 
 char *
-get_local_ipaddr(int socket)
+get_local_ipaddr(int sock)
 {
 	char *p;
 
-	if ((p = get_socket_address(socket, 0, NI_NUMERICHOST)) != NULL)
+	if ((p = get_socket_address(sock, 0, NI_NUMERICHOST)) != NULL)
 		return p;
 	return xstrdup("UNKNOWN");
 }
 
 char *
-get_local_name(int socket)
+get_local_name(int sock)
 {
-	return get_socket_address(socket, 0, NI_NAMEREQD);
+	return get_socket_address(sock, 0, NI_NAMEREQD);
 }
 
 /*
@@ -330,6 +347,7 @@ get_sock_port(int sock, int local)
 	struct sockaddr_storage from;
 	socklen_t fromlen;
 	char strport[NI_MAXSERV];
+	int r;
 
 	/* Get IP address of client. */
 	fromlen = sizeof(from);
@@ -342,7 +360,7 @@ get_sock_port(int sock, int local)
 	} else {
 		if (getpeername(sock, (struct sockaddr *)&from, &fromlen) < 0) {
 			debug("getpeername failed: %.100s", strerror(errno));
-			cleanup_exit(255);
+			return -1;
 		}
 	}
 
@@ -351,9 +369,10 @@ get_sock_port(int sock, int local)
 		fromlen = sizeof(struct sockaddr_in6);
 
 	/* Return port number. */
-	if (getnameinfo((struct sockaddr *)&from, fromlen, NULL, 0,
-	    strport, sizeof(strport), NI_NUMERICSERV) != 0)
-		fatal("get_sock_port: getnameinfo NI_NUMERICSERV failed");
+	if ((r = getnameinfo((struct sockaddr *)&from, fromlen, NULL, 0,
+	    strport, sizeof(strport), NI_NUMERICSERV)) != 0)
+		fatal("get_sock_port: getnameinfo NI_NUMERICSERV failed: %s",
+		    r == EAI_SYSTEM ? strerror(errno) : gai_strerror(r));
 	return atoi(strport);
 }
 
@@ -382,7 +401,13 @@ get_peer_port(int sock)
 int
 get_remote_port(void)
 {
-	return get_port(0);
+	static int port = -1;
+
+	/* Cache to avoid getpeername() on a dead connection */
+	if (port == -1)
+		port = get_port(0);
+
+	return port;
 }
 
 int

@@ -1,3 +1,4 @@
+/* $OpenBSD: sshtty.c,v 1.12 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -35,10 +36,13 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: sshtty.c,v 1.5 2003/09/19 17:43:35 markus Exp $");
 
-#include "sshtty.h"
-#include "log.h"
+#include <sys/types.h>
+#include <stdio.h>
+#include <termios.h>
+#include <pwd.h>
+
+#include "sshpty.h"
 
 static struct termios _saved_tio;
 static int _in_raw_mode = 0;

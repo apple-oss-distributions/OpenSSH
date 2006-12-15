@@ -1,4 +1,4 @@
-/*	$OpenBSD: servconf.h,v 1.67 2003/12/23 16:12:10 jakob Exp $	*/
+/* $OpenBSD: servconf.h,v 1.79 2006/08/14 12:40:25 dtucker Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -24,6 +24,8 @@
 #define MAX_DENY_GROUPS		256	/* Max # groups on deny list. */
 #define MAX_SUBSYSTEMS		256	/* Max # subsystems. */
 #define MAX_HOSTKEYS		256	/* Max # hostkeys. */
+#define MAX_ACCEPT_ENV		256	/* Max # of env vars. */
+#define MAX_MATCH_GROUPS	256	/* Max # of groups for Match. */
 
 /* permit_root_login */
 #define	PERMIT_NOT_SET		-1
@@ -32,6 +34,7 @@
 #define	PERMIT_NO_PASSWD	2
 #define	PERMIT_YES		3
 
+#define DEFAULT_AUTH_FAIL_MAX	6	/* Default for MaxAuthTries */
 
 typedef struct {
 	u_int num_ports;
@@ -39,6 +42,7 @@ typedef struct {
 	u_short ports[MAX_PORTS];	/* Port number to listen on. */
 	char   *listen_addr;		/* Address on which the server listens. */
 	struct addrinfo *listen_addrs;	/* Addresses on which the server listens. */
+	int     address_family;		/* Address family used by the server. */
 	char   *host_key_files[MAX_HOSTKEYS];	/* Files containing host keys. */
 	int     num_host_key_files;     /* Number of files for host keys. */
 	char   *pid_file;	/* Where to put our pid */
@@ -83,11 +87,9 @@ typedef struct {
 	int     kerberos_get_afs_token;		/* If true, try to get AFS token if
 						 * authenticated with Kerberos. */
 	int     gss_authentication;	/* If true, permit GSSAPI authentication */
-  int gss_nomic_authentication; /* Add option for old gssapi mechanism*/
-	int     gss_keyex;
-	int     gss_use_session_ccache;        /* If true, delegated credentials are
-	                                        * stored in a session specific cache */
+	int 	gss_keyex;		/* If true, permit GSSAPI key exchange */
 	int     gss_cleanup_creds;	/* If true, destroy cred cache on logout */
+	int 	gss_strict_acceptor;	/* If true, restrict the GSSAPI acceptor name */
 	int     password_authentication;	/* If true, permit password
 						 * authentication. */
 	int     kbd_interactive_authentication;	/* If true, permit */
@@ -110,10 +112,15 @@ typedef struct {
 	u_int num_subsystems;
 	char   *subsystem_name[MAX_SUBSYSTEMS];
 	char   *subsystem_command[MAX_SUBSYSTEMS];
+	char   *subsystem_args[MAX_SUBSYSTEMS];
+
+	u_int num_accept_env;
+	char   *accept_env[MAX_ACCEPT_ENV];
 
 	int	max_startups_begin;
 	int	max_startups_rate;
 	int	max_startups;
+	int	max_authtries;
 	char   *banner;			/* SSH-2 banner message */
 	int	use_dns;
 	int	client_alive_interval;	/*
@@ -128,14 +135,26 @@ typedef struct {
 
 	char   *authorized_keys_file;	/* File containing public keys */
 	char   *authorized_keys_file2;
+
+	char   *adm_forced_command;
+
 	int	use_pam;		/* Enable auth via PAM */
 	int	sacl_support;		/* Enable use of SACLs */
+
+	int	permit_tun;
+
+	int	num_permitted_opens;
 }       ServerOptions;
 
 void	 initialize_server_options(ServerOptions *);
-void	 read_server_config(ServerOptions *, const char *);
 void	 fill_default_server_options(ServerOptions *);
-int	 process_server_config_line(ServerOptions *, char *, const char *, int);
-
+int	 process_server_config_line(ServerOptions *, char *, const char *, int,
+	     int *, const char *, const char *, const char *);
+void	 load_server_config(const char *, Buffer *);
+void	 parse_server_config(ServerOptions *, const char *, Buffer *,
+	     const char *, const char *, const char *);
+void	 parse_server_match_config(ServerOptions *, const char *, const char *,
+	     const char *);
+void	 copy_set_server_options(ServerOptions *, ServerOptions *);
 
 #endif				/* SERVCONF_H */

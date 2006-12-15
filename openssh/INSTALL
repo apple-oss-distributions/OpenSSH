@@ -3,7 +3,7 @@
 
 You will need working installations of Zlib and OpenSSL.
 
-Zlib 1.1.4 or greater:
+Zlib 1.1.4 or 1.2.1.2 or greater (ealier 1.2.x versions have problems):
 http://www.gzip.org/zlib/
 
 OpenSSL 0.9.6 or greater:
@@ -11,6 +11,8 @@ http://www.openssl.org/
 
 (OpenSSL 0.9.5a is partially supported, but some ciphers (SSH protocol 1
 Blowfish) do not work correctly.)
+
+The remaining items are optional.
 
 OpenSSH can utilise Pluggable Authentication Modules (PAM) if your system
 supports it. PAM is standard on Redhat and Debian Linux, Solaris and
@@ -30,7 +32,7 @@ libraries and headers.
 GNOME:
 http://www.gnome.org/
 
-Alternatively, Jim Knoble <jmknoble@jmknoble.cx> has written an excellent X11
+Alternatively, Jim Knoble <jmknoble@pobox.com> has written an excellent X11
 passphrase requester. This is maintained separately at:
 
 http://www.jmknoble.net/software/x11-ssh-askpass/
@@ -50,11 +52,35 @@ lacks /dev/random and don't want to use OpenSSH's internal entropy collection.
 http://www.lothar.com/tech/crypto/
 
 S/Key Libraries:
+
+If you wish to use --with-skey then you will need the library below
+installed.  No other S/Key library is currently known to be supported.
+
 http://www.sparc.spb.su/solaris/skey/
 
-If you wish to use --with-skey then you will need the above library
-installed.  No other current S/Key library is currently known to be
-supported.
+LibEdit:
+
+sftp supports command-line editing via NetBSD's libedit.  If your platform
+has it available natively you can use that, alternatively you might try
+these multi-platform ports:
+
+http://www.thrysoee.dk/editline/
+http://sourceforge.net/projects/libedit/
+
+Autoconf:
+
+If you modify configure.ac or configure doesn't exist (eg if you checked
+the code out of CVS yourself) then you will need autoconf-2.60 to rebuild
+the automatically generated files by running "autoreconf".
+
+http://www.gnu.org/software/autoconf/
+
+Basic Security Module (BSM):
+
+Native BSM support is know to exist in Solaris from at least 2.5.1,
+FreeBSD 6.1 and OS X.  Alternatively, you may use the OpenBSM
+implementation (http://www.openbsm.org).
+
 
 2. Building / Installation
 --------------------------
@@ -83,6 +109,10 @@ make install
 This will install the binaries in /opt/{bin,lib,sbin}, but will place the
 configuration files in /etc/ssh.
 
+If you are using Privilege Separation (which is enabled by default)
+then you will also need to create the user, group and directory used by
+sshd for privilege separation.  See README.privsep for details.
+
 If you are using PAM, you may need to manually install a PAM control
 file as "/etc/pam.d/sshd" (or wherever your system prefers to keep
 them).  Note that the service name used to start PAM is __progname,
@@ -99,22 +129,11 @@ authentication.  On HP-UX 11 and Solaris, the standard /etc/pam.conf
 configuration will work with sshd (sshd will match the other service
 name).
 
-If you enable BSM auditing on Solaris, you need to update audit_event(4)
-for praudit(1m) to give sensible output.  The following line needs to be
-added to /etc/security/audit_event:
-
-	32800:AUE_openssh:OpenSSH login:lo
-
-If the contrib/buildpkg.sh script is used, the included postinstall
-script will add the line for you.
-
-The BSM audit event range available for third party TCB applications is
-32768 - 65535.  Event number 32800 has been choosen for AUE_openssh.
-There is no official registry of 3rd party event numbers, so if this
-number is already in use on your system, change the value of
-AUE_openssh in openbsd-compat/bsd-solaris.h and rebuild.
-
 There are a few other options to the configure script:
+
+--with-audit=[module] enable additional auditing via the specified module.
+Currently, drivers for "debug" (additional info via syslog) and "bsm"
+(Sun's Basic Security Module) are supported.
 
 --with-pam enables PAM support. If PAM support is compiled in, it must
 also be enabled in sshd_config (refer to the UsePAM directive).
@@ -168,6 +187,8 @@ created.
 --with-ssl-dir=DIR allows you to specify where your OpenSSL libraries
 are installed.
 
+--with-ssl-engine enables OpenSSL's (hardware) ENGINE support
+
 --with-4in6 Check for IPv4 in IPv6 mapped addresses and convert them to
 real (AF_INET) IPv4 addresses. Works around some quirks on Linux.
 
@@ -207,7 +228,21 @@ running and has collected some Entropy.
 For more information on configuration, please refer to the manual pages
 for sshd, ssh and ssh-agent.
 
-4. Problems?
+4. (Optional) Send survey
+-------------------------
+
+$ make survey
+[check the contents of the file "survey" to ensure there's no information
+that you consider sensitive]
+$ make send-survey
+
+This will send configuration information for the currently configured
+host to a survey address.  This will help determine which configurations
+are actually in use, and what valid combinations of configure options
+exist.  The raw data is available only to the OpenSSH developers, however
+summary data may be published.
+
+5. Problems?
 ------------
 
 If you experience problems compiling, installing or running OpenSSH.
@@ -215,4 +250,4 @@ Please refer to the "reporting bugs" section of the webpage at
 http://www.openssh.com/
 
 
-$Id: INSTALL,v 1.63 2003/11/21 12:48:55 djm Exp $
+$Id: INSTALL,v 1.76 2006/09/17 12:55:52 dtucker Exp $

@@ -29,20 +29,7 @@
 
 #include "includes.h"
 
-RCSID("$Id: bsd-cygwin_util.c,v 1.12 2004/04/18 11:15:45 djm Exp $");
-
 #ifdef HAVE_CYGWIN
-
-#include <fcntl.h>
-#include <stdlib.h>
-#include <sys/utsname.h>
-#include <sys/vfs.h>
-#include <windows.h>
-#define is_winnt       (GetVersion() < 0x80000000)
-
-#define ntsec_on(c)	((c) && strstr((c),"ntsec") && !strstr((c),"nontsec"))
-#define ntsec_off(c)	((c) && strstr((c),"nontsec"))
-#define ntea_on(c)	((c) && strstr((c),"ntea") && !strstr((c),"nontea"))
 
 #if defined(open) && open == binary_open
 # undef open
@@ -50,6 +37,23 @@ RCSID("$Id: bsd-cygwin_util.c,v 1.12 2004/04/18 11:15:45 djm Exp $");
 #if defined(pipe) && open == binary_pipe
 # undef pipe
 #endif
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/utsname.h>
+#include <sys/vfs.h>
+
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <windows.h>
+
+#include "xmalloc.h"
+#define is_winnt       (GetVersion() < 0x80000000)
+
+#define ntsec_on(c)	((c) && strstr((c),"ntsec") && !strstr((c),"nontsec"))
+#define ntsec_off(c)	((c) && strstr((c),"nontsec"))
+#define ntea_on(c)	((c) && strstr((c),"ntea") && !strstr((c),"nontea"))
 
 int 
 binary_open(const char *filename, int flags, ...)
@@ -96,7 +100,6 @@ has_capability(int what)
 	 */
 	if (!inited) {
 		struct utsname uts;
-		char *c;
 		
 		if (!uname(&uts)) {
 			int major_high = 0, major_low = 0, minor = 0;
@@ -234,6 +237,57 @@ register_9x_service(void)
 		GetProcAddress(kerneldll, "RegisterServiceProcess")))
 		return;
 	RegisterServiceProcess(0, 1);
+}
+
+#define NL(x) x, (sizeof (x) - 1)
+#define WENV_SIZ (sizeof (wenv_arr) / sizeof (wenv_arr[0]))
+
+static struct wenv {
+	const char *name;
+	size_t namelen;
+} wenv_arr[] = {
+	{ NL("ALLUSERSPROFILE=") },
+	{ NL("COMMONPROGRAMFILES=") },
+	{ NL("COMPUTERNAME=") },
+	{ NL("COMSPEC=") },
+	{ NL("CYGWIN=") },
+	{ NL("NUMBER_OF_PROCESSORS=") },
+	{ NL("OS=") },
+	{ NL("PATH=") },
+	{ NL("PATHEXT=") },
+	{ NL("PROCESSOR_ARCHITECTURE=") },
+	{ NL("PROCESSOR_IDENTIFIER=") },
+	{ NL("PROCESSOR_LEVEL=") },
+	{ NL("PROCESSOR_REVISION=") },
+	{ NL("PROGRAMFILES=") },
+	{ NL("SYSTEMDRIVE=") },
+	{ NL("SYSTEMROOT=") },
+	{ NL("TMP=") },
+	{ NL("TEMP=") },
+	{ NL("WINDIR=") }
+};
+
+char **
+fetch_windows_environment(void)
+{
+	char **e, **p;
+	unsigned int i, idx = 0;
+
+	p = xcalloc(WENV_SIZ + 1, sizeof(char *));
+	for (e = environ; *e != NULL; ++e) {
+		for (i = 0; i < WENV_SIZ; ++i) {
+			if (!strncmp(*e, wenv_arr[i].name, wenv_arr[i].namelen))
+				p[idx++] = *e;
+		}
+	}
+	p[idx] = NULL;
+	return p;
+}
+
+void
+free_windows_environment(char **p)
+{
+	xfree(p);
 }
 
 #endif /* HAVE_CYGWIN */

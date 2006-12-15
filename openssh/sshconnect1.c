@@ -1,3 +1,4 @@
+/* $OpenBSD: sshconnect1.c,v 1.70 2006/11/06 21:25:28 markus Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -13,28 +14,38 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: sshconnect1.c,v 1.56 2003/08/28 12:54:34 markus Exp $");
+
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include <openssl/bn.h>
 #include <openssl/md5.h>
 
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <pwd.h>
+
+#include "xmalloc.h"
 #include "ssh.h"
 #include "ssh1.h"
-#include "xmalloc.h"
 #include "rsa.h"
 #include "buffer.h"
 #include "packet.h"
-#include "mpaux.h"
+#include "key.h"
+#include "cipher.h"
+#include "kex.h"
 #include "uidswap.h"
 #include "log.h"
 #include "readconf.h"
-#include "key.h"
 #include "authfd.h"
 #include "sshconnect.h"
 #include "authfile.h"
-#include "readpass.h"
-#include "cipher.h"
+#include "misc.h"
 #include "canohost.h"
+#include "hostfile.h"
 #include "auth.h"
 
 /* Session id for the current session. */
@@ -84,7 +95,7 @@ try_agent_authentication(void)
 		/* Wait for server's response. */
 		type = packet_read();
 
-		/* The server sends failure if it doesn\'t like our key or
+		/* The server sends failure if it doesn't like our key or
 		   does not support RSA authentication. */
 		if (type == SSH_SMSG_FAILURE) {
 			debug("Server refused our key.");
@@ -162,7 +173,7 @@ respond_to_rsa_challenge(BIGNUM * challenge, RSA * prv)
 	/* Compute the response. */
 	/* The response is MD5 of decrypted challenge plus session id. */
 	len = BN_num_bytes(challenge);
-	if (len <= 0 || len > sizeof(buf))
+	if (len <= 0 || (u_int)len > sizeof(buf))
 		packet_disconnect(
 		    "respond_to_rsa_challenge: bad challenge length %d", len);
 
@@ -197,7 +208,7 @@ try_rsa_authentication(int idx)
 	BIGNUM *challenge;
 	Key *public, *private;
 	char buf[300], *passphrase, *comment, *authfile;
-	int i, type, quit;
+	int i, perm_ok = 1, type, quit;
 
 	public = options.identity_keys[idx];
 	authfile = options.identity_files[idx];
@@ -215,8 +226,8 @@ try_rsa_authentication(int idx)
 	type = packet_read();
 
 	/*
-	 * The server responds with failure if it doesn\'t like our key or
-	 * doesn\'t support RSA authentication.
+	 * The server responds with failure if it doesn't like our key or
+	 * doesn't support RSA authentication.
 	 */
 	if (type == SSH_SMSG_FAILURE) {
 		debug("Server refused our key.");
@@ -243,15 +254,16 @@ try_rsa_authentication(int idx)
 	if (public->flags & KEY_FLAG_EXT)
 		private = public;
 	else
-		private = key_load_private_type(KEY_RSA1, authfile, "", NULL);
-	if (private == NULL && !options.batch_mode) {
+		private = key_load_private_type(KEY_RSA1, authfile, "", NULL,
+		    &perm_ok);
+	if (private == NULL && !options.batch_mode && perm_ok) {
 		snprintf(buf, sizeof(buf),
 		    "Enter passphrase for RSA key '%.100s': ", comment);
 		for (i = 0; i < options.number_of_password_prompts; i++) {
 			passphrase = read_passphrase(buf, 0);
 			if (strcmp(passphrase, "") != 0) {
 				private = key_load_private_type(KEY_RSA1,
-				    authfile, passphrase, NULL);
+				    authfile, passphrase, NULL, NULL);
 				quit = 0;
 			} else {
 				debug2("no passphrase given, try next key");
@@ -268,7 +280,7 @@ try_rsa_authentication(int idx)
 	xfree(comment);
 
 	if (private == NULL) {
-		if (!options.batch_mode)
+		if (!options.batch_mode && perm_ok)
 			error("Bad passphrase.");
 
 		/* Send a dummy response packet to avoid protocol error. */
@@ -476,7 +488,7 @@ ssh_kex(char *host, struct sockaddr *hostaddr)
 	u_char cookie[8];
 	u_int supported_ciphers;
 	u_int server_flags, client_flags;
-	u_int32_t rand = 0;
+	u_int32_t rnd = 0;
 
 	debug("Waiting for server public key.");
 
@@ -528,7 +540,7 @@ ssh_kex(char *host, struct sockaddr *hostaddr)
 
 	client_flags = SSH_PROTOFLAG_SCREEN_NUMBER | SSH_PROTOFLAG_HOST_IN_FWD_OPEN;
 
-	compute_session_id(session_id, cookie, host_key->rsa->n, server_key->rsa->n);
+	derive_ssh1_session_id(host_key->rsa->n, server_key->rsa->n, cookie, session_id);
 
 	/* Generate a session key. */
 	arc4random_stir();
@@ -540,9 +552,9 @@ ssh_kex(char *host, struct sockaddr *hostaddr)
 	 */
 	for (i = 0; i < 32; i++) {
 		if (i % 4 == 0)
-			rand = arc4random();
-		session_key[i] = rand & 0xff;
-		rand >>= 8;
+			rnd = arc4random();
+		session_key[i] = rnd & 0xff;
+		rnd >>= 8;
 	}
 
 	/*
@@ -551,14 +563,20 @@ ssh_kex(char *host, struct sockaddr *hostaddr)
 	 * the first 16 bytes of the session id.
 	 */
 	if ((key = BN_new()) == NULL)
-		fatal("respond_to_rsa_challenge: BN_new failed");
-	BN_set_word(key, 0);
+		fatal("ssh_kex: BN_new failed");
+	if (BN_set_word(key, 0) == 0)
+		fatal("ssh_kex: BN_set_word failed");
 	for (i = 0; i < SSH_SESSION_KEY_LENGTH; i++) {
-		BN_lshift(key, key, 8);
-		if (i < 16)
-			BN_add_word(key, session_key[i] ^ session_id[i]);
-		else
-			BN_add_word(key, session_key[i]);
+		if (BN_lshift(key, key, 8) == 0)
+			fatal("ssh_kex: BN_lshift failed");
+		if (i < 16) {
+			if (BN_add_word(key, session_key[i] ^ session_id[i])
+			    == 0)
+				fatal("ssh_kex: BN_add_word failed");
+		} else {
+			if (BN_add_word(key, session_key[i]) == 0)
+				fatal("ssh_kex: BN_add_word failed");
+		}
 	}
 
 	/*
@@ -598,7 +616,7 @@ ssh_kex(char *host, struct sockaddr *hostaddr)
 	if (options.cipher == SSH_CIPHER_NOT_SET) {
 		if (cipher_mask_ssh1(1) & supported_ciphers & (1 << ssh_cipher_default))
 			options.cipher = ssh_cipher_default;
-	} else if (options.cipher == SSH_CIPHER_ILLEGAL ||
+	} else if (options.cipher == SSH_CIPHER_INVALID ||
 	    !(cipher_mask_ssh1(1) & (1 << options.cipher))) {
 		logit("No valid SSH1 cipher, using %.100s instead.",
 		    cipher_name(ssh_cipher_default));

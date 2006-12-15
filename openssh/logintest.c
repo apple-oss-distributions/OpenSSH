@@ -31,6 +31,10 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -43,13 +47,7 @@
 
 #include "loginrec.h"
 
-RCSID("$Id: logintest.c,v 1.10 2003/08/21 23:34:41 djm Exp $");
-
-#ifdef HAVE___PROGNAME
 extern char *__progname;
-#else
-char *__progname;
-#endif
 
 #define PAUSE_BEFORE_LOGOUT 3
 

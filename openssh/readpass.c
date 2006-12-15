@@ -1,3 +1,4 @@
+/* $OpenBSD: readpass.c,v 1.47 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -23,13 +24,27 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: readpass.c,v 1.28 2003/01/23 13:50:27 markus Exp $");
+
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#ifdef HAVE_PATHS_H
+# include <paths.h>
+#endif
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "xmalloc.h"
-#include "readpass.h"
+#include "misc.h"
 #include "pathnames.h"
 #include "log.h"
 #include "ssh.h"
+#include "uidswap.h"
 
 static char *
 ssh_askpass(char *askpass, const char *msg)
@@ -53,8 +68,7 @@ ssh_askpass(char *askpass, const char *msg)
 		return NULL;
 	}
 	if (pid == 0) {
-		seteuid(getuid());
-		setuid(getuid());
+		permanently_drop_suid(getuid());
 		close(p[0]);
 		if (dup2(p[1], STDOUT_FILENO) < 0)
 			fatal("ssh_askpass: dup2: %s", strerror(errno));
@@ -103,17 +117,27 @@ read_passphrase(const char *prompt, int flags)
 	int rppflags, use_askpass = 0, ttyfd;
 
 	rppflags = (flags & RP_ECHO) ? RPP_ECHO_ON : RPP_ECHO_OFF;
-	if (flags & RP_ALLOW_STDIN) {
-		if (!isatty(STDIN_FILENO))
+	if (flags & RP_USE_ASKPASS)
+		use_askpass = 1;
+	else if (flags & RP_ALLOW_STDIN) {
+		if (!isatty(STDIN_FILENO)) {
+			debug("read_passphrase: stdin is not a tty");
 			use_askpass = 1;
+		}
 	} else {
 		rppflags |= RPP_REQUIRE_TTY;
 		ttyfd = open(_PATH_TTY, O_RDWR);
 		if (ttyfd >= 0)
 			close(ttyfd);
-		else
+		else {
+			debug("read_passphrase: can't open %s: %s", _PATH_TTY,
+			    strerror(errno));
 			use_askpass = 1;
+		}
 	}
+
+	if ((flags & RP_USE_ASKPASS) && getenv("DISPLAY") == NULL)
+		return (flags & RP_ALLOW_EOF) ? NULL : xstrdup("");
 
 	if (use_askpass && getenv("DISPLAY")) {
 		if (getenv(SSH_ASKPASS_ENV))
@@ -135,4 +159,30 @@ read_passphrase(const char *prompt, int flags)
 	ret = xstrdup(buf);
 	memset(buf, 'x', sizeof buf);
 	return ret;
+}
+
+int
+ask_permission(const char *fmt, ...)
+{
+	va_list args;
+	char *p, prompt[1024];
+	int allowed = 0;
+
+	va_start(args, fmt);
+	vsnprintf(prompt, sizeof(prompt), fmt, args);
+	va_end(args);
+
+	p = read_passphrase(prompt, RP_USE_ASKPASS|RP_ALLOW_EOF);
+	if (p != NULL) {
+		/*
+		 * Accept empty responses and responses consisting
+		 * of the word "yes" as affirmative.
+		 */
+		if (*p == '\0' || *p == '\n' ||
+		    strcasecmp(p, "yes") == 0)
+			allowed = 1;
+		xfree(p);
+	}
+
+	return (allowed);
 }

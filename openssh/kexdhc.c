@@ -1,3 +1,4 @@
+/* $OpenBSD: kexdhc.c,v 1.11 2006/11/06 21:25:28 markus Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -23,10 +24,18 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: kexdhc.c,v 1.1 2003/02/16 17:09:57 markus Exp $");
+
+#include <sys/types.h>
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <signal.h>
 
 #include "xmalloc.h"
+#include "buffer.h"
 #include "key.h"
+#include "cipher.h"
 #include "kex.h"
 #include "log.h"
 #include "packet.h"
@@ -41,10 +50,20 @@ kexdh_client(Kex *kex)
 	Key *server_host_key;
 	u_char *server_host_key_blob = NULL, *signature = NULL;
 	u_char *kbuf, *hash;
-	u_int klen, kout, slen, sbloblen;
+	u_int klen, slen, sbloblen, hashlen;
+	int kout;
 
 	/* generate and send 'e', client DH public key */
-	dh = dh_new_group1();
+	switch (kex->kex_type) {
+	case KEX_DH_GRP1_SHA1:
+		dh = dh_new_group1();
+		break;
+	case KEX_DH_GRP14_SHA1:
+		dh = dh_new_group14();
+		break;
+	default:
+		fatal("%s: Unexpected KEX type %d", __func__, kex->kex_type);
+	}
 	dh_gen_key(dh, kex->we_need * 8);
 	packet_start(SSH2_MSG_KEXDH_INIT);
 	packet_put_bignum2(dh->pub_key);
@@ -73,7 +92,7 @@ kexdh_client(Kex *kex)
 	if (kex->verify_host_key(server_host_key) == -1)
 		fatal("server_host_key verification failed");
 
-	/* DH paramter f, server public DH key */
+	/* DH parameter f, server public DH key */
 	if ((dh_server_pub = BN_new()) == NULL)
 		fatal("dh_server_pub == NULL");
 	packet_get_bignum2(dh_server_pub);
@@ -94,18 +113,20 @@ kexdh_client(Kex *kex)
 
 	klen = DH_size(dh);
 	kbuf = xmalloc(klen);
-	kout = DH_compute_key(kbuf, dh_server_pub, dh);
+	if ((kout = DH_compute_key(kbuf, dh_server_pub, dh)) < 0)
+		fatal("DH_compute_key: failed");
 #ifdef DEBUG_KEXDH
 	dump_digest("shared secret", kbuf, kout);
 #endif
 	if ((shared_secret = BN_new()) == NULL)
 		fatal("kexdh_client: BN_new failed");
-	BN_bin2bn(kbuf, kout, shared_secret);
+	if (BN_bin2bn(kbuf, kout, shared_secret) == NULL)
+		fatal("kexdh_client: BN_bin2bn failed");
 	memset(kbuf, 0, klen);
 	xfree(kbuf);
 
 	/* calc and verify H */
-	hash = kex_dh_hash(
+	kex_dh_hash(
 	    kex->client_version_string,
 	    kex->server_version_string,
 	    buffer_ptr(&kex->my), buffer_len(&kex->my),
@@ -113,25 +134,26 @@ kexdh_client(Kex *kex)
 	    server_host_key_blob, sbloblen,
 	    dh->pub_key,
 	    dh_server_pub,
-	    shared_secret
+	    shared_secret,
+	    &hash, &hashlen
 	);
 	xfree(server_host_key_blob);
 	BN_clear_free(dh_server_pub);
 	DH_free(dh);
 
-	if (key_verify(server_host_key, signature, slen, hash, 20) != 1)
+	if (key_verify(server_host_key, signature, slen, hash, hashlen) != 1)
 		fatal("key_verify failed for server_host_key");
 	key_free(server_host_key);
 	xfree(signature);
 
 	/* save session id */
 	if (kex->session_id == NULL) {
-		kex->session_id_len = 20;
+		kex->session_id_len = hashlen;
 		kex->session_id = xmalloc(kex->session_id_len);
 		memcpy(kex->session_id, hash, kex->session_id_len);
 	}
 
-	kex_derive_keys(kex, hash, shared_secret);
+	kex_derive_keys(kex, hash, hashlen, shared_secret);
 	BN_clear_free(shared_secret);
 	kex_finish(kex);
 }

@@ -1,5 +1,5 @@
 /* 
- * $Id: bsd-cray.c,v 1.13 2004/01/30 03:34:22 dtucker Exp $
+ * $Id: bsd-cray.c,v 1.16 2006/09/01 05:38:41 djm Exp $
  *
  * bsd-cray.c
  *
@@ -52,7 +52,10 @@
 #include <sys/secstat.h>
 #include <sys/stat.h>
 #include <sys/session.h>
+#include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <pwd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -171,7 +174,7 @@ cray_access_denied(char *username)
  * record_failed_login: generic "login failed" interface function
  */
 void
-record_failed_login(const char *user, const char *ttyname)
+record_failed_login(const char *user, const char *hostname, const char *ttyname)
 {
 	cray_login_failure((char *)user, IA_UDBERR);
 }

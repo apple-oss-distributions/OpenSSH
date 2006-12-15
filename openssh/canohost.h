@@ -1,4 +1,4 @@
-/*	$OpenBSD: canohost.h,v 1.8 2001/06/26 17:27:23 markus Exp $	*/
+/* $OpenBSD: canohost.h,v 1.9 2006/03/25 22:22:42 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -23,3 +23,5 @@ char		*get_local_name(int);
 
 int		 get_remote_port(void);
 int		 get_local_port(void);
+
+void		 ipv64_normalise_mapped(struct sockaddr_storage *, socklen_t *);

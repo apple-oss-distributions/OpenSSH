@@ -1,3 +1,4 @@
+/* $OpenBSD: authfile.c,v 1.76 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,21 +37,34 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: authfile.c,v 1.55 2003/09/18 07:56:05 markus Exp $");
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/param.h>
+#include <sys/uio.h>
 
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 
-#include "cipher.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "xmalloc.h"
+#include "cipher.h"
 #include "buffer.h"
-#include "bufaux.h"
 #include "key.h"
 #include "ssh.h"
 #include "log.h"
 #include "authfile.h"
 #include "rsa.h"
+#include "misc.h"
+#include "atomicio.h"
 
 /* Version identification string for SSH v1 identity files. */
 static const char authfile_id_string[] =
@@ -72,7 +86,7 @@ key_save_private_rsa1(Key *key, const char *filename, const char *passphrase,
 	int fd, i, cipher_num;
 	CipherContext ciphercontext;
 	Cipher *cipher;
-	u_int32_t rand;
+	u_int32_t rnd;
 
 	/*
 	 * If the passphrase is empty, use SSH_CIPHER_NONE to ease converting
@@ -87,9 +101,9 @@ key_save_private_rsa1(Key *key, const char *filename, const char *passphrase,
 	buffer_init(&buffer);
 
 	/* Put checkbytes for checking passphrase validity. */
-	rand = arc4random();
-	buf[0] = rand & 0xff;
-	buf[1] = (rand >> 8) & 0xff;
+	rnd = arc4random();
+	buf[0] = rnd & 0xff;
+	buf[1] = (rnd >> 8) & 0xff;
 	buf[2] = buf[0];
 	buf[3] = buf[1];
 	buffer_append(&buffer, buf, 4);
@@ -146,8 +160,8 @@ key_save_private_rsa1(Key *key, const char *filename, const char *passphrase,
 		buffer_free(&encrypted);
 		return 0;
 	}
-	if (write(fd, buffer_ptr(&encrypted), buffer_len(&encrypted)) !=
-	    buffer_len(&encrypted)) {
+	if (atomicio(vwrite, fd, buffer_ptr(&encrypted),
+	    buffer_len(&encrypted)) != buffer_len(&encrypted)) {
 		error("write to key file %s failed: %s", filename,
 		    strerror(errno));
 		buffer_free(&encrypted);
@@ -182,7 +196,7 @@ key_save_private_pem(Key *key, const char *filename, const char *_passphrase,
 		return 0;
 	}
 	fp = fdopen(fd, "w");
-	if (fp == NULL ) {
+	if (fp == NULL) {
 		error("fdopen %s failed: %s.", filename, strerror(errno));
 		close(fd);
 		return 0;
@@ -209,12 +223,10 @@ key_save_private(Key *key, const char *filename, const char *passphrase,
 	case KEY_RSA1:
 		return key_save_private_rsa1(key, filename, passphrase,
 		    comment);
-		break;
 	case KEY_DSA:
 	case KEY_RSA:
 		return key_save_private_pem(key, filename, passphrase,
 		    comment);
-		break;
 	default:
 		break;
 	}
@@ -235,20 +247,24 @@ key_load_public_rsa1(int fd, const char *filename, char **commentp)
 	Key *pub;
 	struct stat st;
 	char *cp;
-	int i;
-	off_t len;
+	u_int i;
+	size_t len;
 
 	if (fstat(fd, &st) < 0) {
 		error("fstat for key file %.200s failed: %.100s",
 		    filename, strerror(errno));
 		return NULL;
 	}
-	len = st.st_size;
+	if (st.st_size > 1*1024*1024) {
+		error("key file %.200s too large", filename);
+		return NULL;
+	}
+	len = (size_t)st.st_size;		/* truncated */
 
 	buffer_init(&buffer);
 	cp = buffer_append_space(&buffer, len);
 
-	if (read(fd, cp, (size_t) len) != (size_t) len) {
+	if (atomicio(read, fd, cp, len) != len) {
 		debug("Read from key file %.200s failed: %.100s", filename,
 		    strerror(errno));
 		buffer_free(&buffer);
@@ -317,8 +333,9 @@ static Key *
 key_load_private_rsa1(int fd, const char *filename, const char *passphrase,
     char **commentp)
 {
-	int i, check1, check2, cipher_type;
-	off_t len;
+	u_int i;
+	int check1, check2, cipher_type;
+	size_t len;
 	Buffer buffer, decrypted;
 	u_char *cp;
 	CipherContext ciphercontext;
@@ -332,12 +349,17 @@ key_load_private_rsa1(int fd, const char *filename, const char *passphrase,
 		close(fd);
 		return NULL;
 	}
-	len = st.st_size;
+	if (st.st_size > 1*1024*1024) {
+		error("key file %.200s too large", filename);
+		close(fd);
+		return (NULL);
+	}
+	len = (size_t)st.st_size;		/* truncated */
 
 	buffer_init(&buffer);
 	cp = buffer_append_space(&buffer, len);
 
-	if (read(fd, cp, (size_t) len) != (size_t) len) {
+	if (atomicio(read, fd, cp, len) != len) {
 		debug("Read from key file %.200s failed: %.100s", filename,
 		    strerror(errno));
 		buffer_free(&buffer);
@@ -495,7 +517,7 @@ key_load_private_pem(int fd, int type, const char *passphrase,
 	return prv;
 }
 
-static int
+int
 key_perm_ok(int fd, const char *filename)
 {
 	struct stat st;
@@ -525,7 +547,7 @@ key_perm_ok(int fd, const char *filename)
 
 Key *
 key_load_private_type(int type, const char *filename, const char *passphrase,
-    char **commentp)
+    char **commentp, int *perm_ok)
 {
 	int fd;
 
@@ -533,22 +555,24 @@ key_load_private_type(int type, const char *filename, const char *passphrase,
 	if (fd < 0)
 		return NULL;
 	if (!key_perm_ok(fd, filename)) {
+		if (perm_ok != NULL)
+			*perm_ok = 0;
 		error("bad permissions: ignore key: %s", filename);
 		close(fd);
 		return NULL;
 	}
+	if (perm_ok != NULL)
+		*perm_ok = 1;
 	switch (type) {
 	case KEY_RSA1:
 		return key_load_private_rsa1(fd, filename, passphrase,
 		    commentp);
 		/* closes fd */
-		break;
 	case KEY_DSA:
 	case KEY_RSA:
 	case KEY_UNSPEC:
 		return key_load_private_pem(fd, type, passphrase, commentp);
 		/* closes fd */
-		break;
 	default:
 		close(fd);
 		break;
@@ -592,13 +616,14 @@ static int
 key_try_load_public(Key *k, const char *filename, char **commentp)
 {
 	FILE *f;
-	char line[4096];
+	char line[SSH_MAX_PUBKEY_BYTES];
 	char *cp;
+	u_long linenum = 0;
 
 	f = fopen(filename, "r");
 	if (f != NULL) {
-		while (fgets(line, sizeof(line), f)) {
-			line[sizeof(line)-1] = '\0';
+		while (read_keyfile_line(f, filename, line, sizeof(line),
+			    &linenum) != -1) {
 			cp = line;
 			switch (*cp) {
 			case '#':

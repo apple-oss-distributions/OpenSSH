@@ -1,4 +1,4 @@
-/*	$OpenBSD: monitor_wrap.h,v 1.13 2003/11/17 11:06:07 markus Exp $	*/
+/* $OpenBSD: monitor_wrap.h,v 1.20 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -27,8 +27,6 @@
 
 #ifndef _MM_WRAP_H_
 #define _MM_WRAP_H_
-#include "key.h"
-#include "buffer.h"
 
 extern int use_privsep;
 #define PRIVSEP(x)	(use_privsep ? mm_##x : x)
@@ -37,7 +35,6 @@ enum mm_keytype {MM_NOKEY, MM_HOSTKEY, MM_USERKEY, MM_RSAHOSTKEY, MM_RSAUSERKEY}
 
 struct monitor;
 struct mm_master;
-struct passwd;
 struct Authctxt;
 
 int mm_is_monitor(void);
@@ -57,16 +54,12 @@ int mm_auth_rsa_verify_response(Key *, BIGNUM *, u_char *);
 BIGNUM *mm_auth_rsa_generate_challenge(Key *);
 
 #ifdef GSSAPI
-#include "ssh-gss.h"
-OM_uint32 mm_ssh_gssapi_server_ctx(Gssctxt **ctxt, gss_OID oid);
-OM_uint32 mm_ssh_gssapi_accept_ctx(Gssctxt *ctxt,
-   gss_buffer_desc *recv, gss_buffer_desc *send, OM_uint32 *flags);
+OM_uint32 mm_ssh_gssapi_server_ctx(Gssctxt **, gss_OID);
+OM_uint32 mm_ssh_gssapi_accept_ctx(Gssctxt *,
+   gss_buffer_desc *, gss_buffer_desc *, OM_uint32 *);
 int mm_ssh_gssapi_userok(char *user);
 OM_uint32 mm_ssh_gssapi_checkmic(Gssctxt *, gss_buffer_t, gss_buffer_t);
-OM_uint32 mm_ssh_gssapi_sign(Gssctxt *ctxt, gss_buffer_desc *buffer,
-			     gss_buffer_desc *hash);
-char *mm_ssh_gssapi_last_error(Gssctxt *ctxt, OM_uint32 *maj, OM_uint32 *min);
-
+OM_uint32 mm_ssh_gssapi_sign(Gssctxt *, gss_buffer_t, gss_buffer_t);
 #endif
 
 #ifdef USE_PAM
@@ -78,10 +71,15 @@ int mm_sshpam_respond(void *, u_int, char **);
 void mm_sshpam_free_ctx(void *);
 #endif
 
+#ifdef SSH_AUDIT_EVENTS
+#include "audit.h"
+void mm_audit_event(ssh_audit_event_t);
+void mm_audit_run_command(const char *);
+#endif
 
 struct Session;
 void mm_terminate(void);
-int mm_pty_allocate(int *, int *, char *, int);
+int mm_pty_allocate(int *, int *, char *, size_t);
 void mm_session_pty_cleanup2(struct Session *);
 
 /* SSHv1 interfaces */
@@ -104,16 +102,10 @@ int mm_bsdauth_respond(void *, u_int, char **);
 int mm_skey_query(void *, char **, char **, u_int *, char ***, u_int **);
 int mm_skey_respond(void *, u_int, char **);
 
-#if defined(HAVE_BSM_AUDIT_H) && defined(HAVE_LIBBSM)
-void mm_solaris_audit_bad_pw(const char *what);
-void mm_solaris_audit_maxtrys(void);
-void mm_solaris_audit_not_console(void);
-#endif /* BSM */
-
 /* zlib allocation hooks */
 
 void *mm_zalloc(struct mm_master *, u_int, u_int);
 void mm_zfree(struct mm_master *, void *);
 void mm_init_compression(struct mm_master *);
 
-#endif /* _MM_H_ */
+#endif /* _MM_WRAP_H_ */

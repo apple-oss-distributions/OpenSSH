@@ -1,9 +1,10 @@
-#	$OpenBSD: try-ciphers.sh,v 1.9 2004/02/28 13:44:45 dtucker Exp $
+#	$OpenBSD: try-ciphers.sh,v 1.10 2005/05/24 04:10:54 djm Exp $
 #	Placed in the Public Domain.
 
 tid="try ciphers"
 
-ciphers="aes128-cbc 3des-cbc blowfish-cbc cast128-cbc arcfour 
+ciphers="aes128-cbc 3des-cbc blowfish-cbc cast128-cbc 
+	arcfour128 arcfour256 arcfour 
 	aes192-cbc aes256-cbc rijndael-cbc@lysator.liu.se
 	aes128-ctr aes192-ctr aes256-ctr"
 macs="hmac-sha1 hmac-md5 hmac-sha1-96 hmac-md5-96"
@@ -29,8 +30,10 @@ for c in $ciphers; do
 	fi
 done
 
-if ! ${SSH} -oCiphers=acss@openssh.org 2>&1 | grep "Bad SSH2 cipher" >/dev/null
+if ${SSH} -oCiphers=acss@openssh.org 2>&1 | grep "Bad SSH2 cipher" >/dev/null
 then
+	:
+else
 
 echo "Ciphers acss@openssh.org" >> $OBJ/sshd_proxy
 c=acss@openssh.org

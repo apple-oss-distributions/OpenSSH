@@ -1,4 +1,4 @@
-/*	$OpenBSD: log.h,v 1.10 2003/09/23 20:17:11 markus Exp $	*/
+/* $OpenBSD: log.h,v 1.15 2006/08/18 09:13:25 deraadt Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -14,8 +14,6 @@
 
 #ifndef SSH_LOG_H
 #define SSH_LOG_H
-
-#include <syslog.h> /* Needed for LOG_AUTHPRIV (if present) */
 
 /* Supported syslog facilities and levels. */
 typedef enum {
@@ -53,8 +51,9 @@ void     log_init(char *, LogLevel, SyslogFacility, int);
 SyslogFacility	log_facility_number(char *);
 LogLevel log_level_number(char *);
 
-void     fatal(const char *, ...) __attribute__((format(printf, 1, 2)));
+void     fatal(const char *, ...) __dead __attribute__((format(printf, 1, 2)));
 void     error(const char *, ...) __attribute__((format(printf, 1, 2)));
+void     sigdie(const char *, ...) __attribute__((format(printf, 1, 2)));
 void     logit(const char *, ...) __attribute__((format(printf, 1, 2)));
 void     verbose(const char *, ...) __attribute__((format(printf, 1, 2)));
 void     debug(const char *, ...) __attribute__((format(printf, 1, 2)));
@@ -62,5 +61,5 @@ void     debug2(const char *, ...) __attribute__((format(printf, 1, 2)));
 void     debug3(const char *, ...) __attribute__((format(printf, 1, 2)));
 
 void	 do_log(LogLevel, const char *, va_list);
-void	 cleanup_exit(int);
+void	 cleanup_exit(int) __dead;
 #endif

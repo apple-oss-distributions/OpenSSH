@@ -1,3 +1,4 @@
+/* $OpenBSD: mac.c,v 1.12 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -23,16 +24,23 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: mac.c,v 1.6 2003/09/18 13:02:21 miod Exp $");
+
+#include <sys/types.h>
 
 #include <openssl/hmac.h>
 
+#include <stdarg.h>
+#include <string.h>
+#include <signal.h>
+
 #include "xmalloc.h"
-#include "getput.h"
 #include "log.h"
 #include "cipher.h"
+#include "buffer.h"
+#include "key.h"
 #include "kex.h"
 #include "mac.h"
+#include "misc.h"
 
 struct {
 	char		*name;
@@ -51,12 +59,15 @@ struct {
 int
 mac_init(Mac *mac, char *name)
 {
-	int i;
+	int i, evp_len;
+
 	for (i = 0; macs[i].name; i++) {
 		if (strcmp(name, macs[i].name) == 0) {
 			if (mac != NULL) {
 				mac->md = (*macs[i].mdfunc)();
-				mac->key_len = mac->mac_len = EVP_MD_size(mac->md);
+				if ((evp_len = EVP_MD_size(mac->md)) <= 0)
+					fatal("mac %s len %d", name, evp_len);
+				mac->key_len = mac->mac_len = (u_int)evp_len;
 				if (macs[i].truncatebits != 0)
 					mac->mac_len = macs[i].truncatebits/8;
 			}
@@ -77,10 +88,10 @@ mac_compute(Mac *mac, u_int32_t seqno, u_char *data, int datalen)
 
 	if (mac->key == NULL)
 		fatal("mac_compute: no key");
-	if ((u_int)mac->mac_len > sizeof(m))
+	if (mac->mac_len > sizeof(m))
 		fatal("mac_compute: mac too long");
 	HMAC_Init(&c, mac->key, mac->key_len, mac->md);
-	PUT_32BIT(b, seqno);
+	put_u32(b, seqno);
 	HMAC_Update(&c, b, sizeof(b));
 	HMAC_Update(&c, data, datalen);
 	HMAC_Final(&c, m, NULL);

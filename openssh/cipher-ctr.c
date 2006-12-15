@@ -1,3 +1,4 @@
+/* $OpenBSD: cipher-ctr.c,v 1.10 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2003 Markus Friedl <markus@openbsd.org>
  *
@@ -14,18 +15,21 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-RCSID("$OpenBSD: cipher-ctr.c,v 1.4 2004/02/06 23:41:13 dtucker Exp $");
+
+#include <sys/types.h>
+
+#include <stdarg.h>
+#include <string.h>
 
 #include <openssl/evp.h>
 
-#include "log.h"
 #include "xmalloc.h"
+#include "log.h"
 
-#if OPENSSL_VERSION_NUMBER < 0x00906000L
-#define SSH_OLD_EVP
-#endif
+/* compatibility with old or broken OpenSSL versions */
+#include "openbsd-compat/openssl-compat.h"
 
-#if OPENSSL_VERSION_NUMBER < 0x00907000L
+#ifdef USE_BUILTIN_RIJNDAEL
 #include "rijndael.h"
 #define AES_KEY rijndael_ctx
 #define AES_BLOCK_SIZE 16
@@ -95,7 +99,7 @@ ssh_aes_ctr_init(EVP_CIPHER_CTX *ctx, const u_char *key, const u_char *iv,
 	}
 	if (key != NULL)
 		AES_set_encrypt_key(key, EVP_CIPHER_CTX_key_length(ctx) * 8,
-		     &c->aes_ctx);
+		    &c->aes_ctx);
 	if (iv != NULL)
 		memcpy(c->aes_counter, iv, AES_BLOCK_SIZE);
 	return (1);

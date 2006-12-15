@@ -1,4 +1,4 @@
-#	$OpenBSD: sshd_config,v 1.68 2003/12/29 16:39:50 millert Exp $
+#	$OpenBSD: sshd_config,v 1.74 2006/07/19 13:07:10 dtucker Exp $
 
 # This is the sshd server system-wide configuration file.  See
 # sshd_config(5) for more information.
@@ -12,6 +12,7 @@
 
 #Port 22
 #Protocol 2,1
+#AddressFamily any
 #ListenAddress 0.0.0.0
 #ListenAddress ::
 
@@ -26,8 +27,8 @@
 #ServerKeyBits 768
 
 # Logging
-#obsoletes QuietMode and FascistLogging
-#SyslogFacility AUTH
+# obsoletes QuietMode and FascistLogging
+SyslogFacility AUTHPRIV
 #LogLevel INFO
 
 # Authentication:
@@ -35,6 +36,7 @@
 #LoginGraceTime 2m
 #PermitRootLogin yes
 #StrictModes yes
+#MaxAuthTries 6
 
 #RSAAuthentication yes
 #PubkeyAuthentication yes
@@ -50,7 +52,8 @@
 # Don't read the user's ~/.rhosts and ~/.shosts files
 #IgnoreRhosts yes
 
-# To disable tunneled clear text passwords, change to no here!
+# To disable tunneled clear text passwords, change to no here! Also,
+# remember to set the UsePAM setting to 'no'.
 #PasswordAuthentication yes
 #PermitEmptyPasswords no
 
@@ -69,11 +72,19 @@
 # GSSAPI options
 #GSSAPIAuthentication no
 #GSSAPICleanupCredentials yes
+#GSSAPIStrictAcceptorCheck yes
+#GSSAPIKeyExchange no
 
-# Set this to 'yes' to enable PAM authentication (via challenge-response)
-# and session processing. Depending on your PAM configuration, this may
-# bypass the setting of 'PasswordAuthentication' and 'PermitEmptyPasswords'
-#UsePAM no
+# Set this to 'yes' to enable PAM authentication, account processing, 
+# and session processing. If this is enabled, PAM authentication will 
+# be allowed through the ChallengeResponseAuthentication and
+# PasswordAuthentication.  Depending on your PAM configuration,
+# PAM authentication via ChallengeResponseAuthentication may bypass
+# the setting of "PermitRootLogin without-password".
+# If you just want the PAM account and session checks to run without
+# PAM authentication, then enable this but set PasswordAuthentication
+# and ChallengeResponseAuthentication to 'no'.
+#UsePAM yes
 
 #AllowTcpForwarding yes
 #GatewayPorts no
@@ -86,15 +97,22 @@
 #UseLogin no
 #UsePrivilegeSeparation yes
 #PermitUserEnvironment no
-#Compression yes
+#Compression delayed
 #ClientAliveInterval 0
 #ClientAliveCountMax 3
 #UseDNS yes
 #PidFile /var/run/sshd.pid
 #MaxStartups 10
+#PermitTunnel no
 
 # no default banner path
 #Banner /some/path
 
 # override default of no subsystems
 Subsystem	sftp	/usr/libexec/sftp-server
+
+# Example of overriding settings on a per-user basis
+#Match User anoncvs
+#	X11Forwarding no
+#	AllowTcpForwarding no
+#	ForceCommand cvs server

@@ -1,4 +1,4 @@
-/*	$OpenBSD: gss-serv-krb5.c,v 1.2 2003/11/21 11:57:03 djm Exp $	*/
+/* $OpenBSD: gss-serv-krb5.c,v 1.7 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Copyright (c) 2001-2003 Simon Wilkinson. All rights reserved.
@@ -29,11 +29,19 @@
 #ifdef GSSAPI
 #ifdef KRB5
 
-#include "auth.h"
+#include <sys/types.h>
+
+#include <stdarg.h>
+#include <string.h>
+
 #include "xmalloc.h"
+#include "key.h"
+#include "hostfile.h"
+#include "auth.h"
 #include "log.h"
 #include "servconf.h"
 
+#include "buffer.h"
 #include "ssh-gss.h"
 
 extern ServerOptions options;
@@ -41,8 +49,7 @@ extern ServerOptions options;
 #ifdef HEIMDAL
 # include <krb5.h>
 #else
-# include <com_err.h>
-# ifdef HAVE_GSSAPI_KRB5_h
+# ifdef HAVE_GSSAPI_KRB5_H
 #  include <gssapi_krb5.h>
 # elif HAVE_GSSAPI_GSSAPI_KRB5_H
 #  include <gssapi/gssapi_krb5.h>
@@ -54,7 +61,7 @@ static krb5_context krb_context = NULL;
 /* Initialise the krb5 library, for the stuff that GSSAPI won't do */
 
 static int
-ssh_gssapi_krb5_init()
+ssh_gssapi_krb5_init(void)
 {
 	krb5_error_code problem;
 
@@ -66,9 +73,6 @@ ssh_gssapi_krb5_init()
 		logit("Cannot initialize krb5 context");
 		return 0;
 	}
-#ifdef KRB5_INIT_ETS
-	krb5_init_ets(krb_context);
-#endif
 
 	return 1;
 }
@@ -132,36 +136,10 @@ ssh_gssapi_krb5_storecreds(ssh_gssapi_client *client)
 		return;
 	}
 #else
-	{
-		char ccname[40];
-
-#ifndef USE_CCAPI
-		int tmpfd;
-
-		snprintf(ccname, sizeof(ccname),
-		    "FILE:/tmp/krb5cc_%d_XXXXXX", geteuid());
-
-		if ((tmpfd = mkstemp(ccname + strlen("FILE:"))) == -1) {
-			logit("mkstemp(): %.100s", strerror(errno));
-			problem = errno;
-			return;
-		}
-		if (fchmod(tmpfd, S_IRUSR | S_IWUSR) == -1) {
-			logit("fchmod(): %.100s", strerror(errno));
-			close(tmpfd);
-			problem = errno;
-			return;
-		}
-		close(tmpfd);
-#else
-		snprintf(ccname, sizeof(ccname), "API:krb5cc_%d", geteuid());
-		debug ("Using ccache '%s'", ccname);
-#endif 
-		if ((problem = krb5_cc_resolve(krb_context, ccname, &ccache))) {
-			logit("krb5_cc_resolve(): %.100s",
-			    krb5_get_err_text(krb_context, problem));
-			return;
-		}
+	if ((problem = ssh_krb5_cc_gen(krb_context, &ccache))) {
+		logit("ssh_krb5_cc_gen(): %.100s",
+		    krb5_get_err_text(krb_context, problem));
+		return;
 	}
 #endif	/* #ifdef HEIMDAL */
 
@@ -190,20 +168,16 @@ ssh_gssapi_krb5_storecreds(ssh_gssapi_client *client)
 		return;
 	}
 
-	{
-		const char *new_ccname = krb5_cc_get_name(krb_context, ccache);
+	const char* new_ccname = krb5_cc_get_name(krb_context, ccache);
 
 	client->store.envvar = "KRB5CCNAME";
-		len = strlen(new_ccname) + 6;
-	client->store.envval = xmalloc(len);
 #ifdef USE_CCAPI
-		snprintf(client->store.envval, len, "API:%s", new_ccname);
-		client->store.filename = NULL;  /* don't unlink -- not a file */
+	xasprintf(&client->store.envval, "API:%s", new_ccname);
+	client->store.filename = NULL;
 #else
-		snprintf(client->store.envval, len, "FILE:%s", new_ccname);
-		client->store.filename = xstrdup(new_ccname);
+	xasprintf(&client->store.envval, "FILE:%s", new_ccname);
+	client->store.filename = xstrdup(new_ccname);
 #endif
-	}
 
 #ifdef USE_PAM
 	if (options.use_pam)

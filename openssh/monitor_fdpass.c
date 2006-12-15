@@ -1,3 +1,4 @@
+/* $OpenBSD: monitor_fdpass.c,v 1.12 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
@@ -24,15 +25,23 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: monitor_fdpass.c,v 1.4 2002/06/26 14:50:04 deraadt Exp $");
 
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/uio.h>
+#ifdef HAVE_SYS_UN_H
+#include <sys/un.h>
+#endif
+
+#include <errno.h>
+#include <string.h>
+#include <stdarg.h>
 
 #include "log.h"
 #include "monitor_fdpass.h"
 
 void
-mm_send_fd(int socket, int fd)
+mm_send_fd(int sock, int fd)
 {
 #if defined(HAVE_SENDMSG) && (defined(HAVE_ACCRIGHTS_IN_MSGHDR) || defined(HAVE_CONTROL_IN_MSGHDR))
 	struct msghdr msg;
@@ -63,7 +72,7 @@ mm_send_fd(int socket, int fd)
 	msg.msg_iov = &vec;
 	msg.msg_iovlen = 1;
 
-	if ((n = sendmsg(socket, &msg, 0)) == -1)
+	if ((n = sendmsg(sock, &msg, 0)) == -1)
 		fatal("%s: sendmsg(%d): %s", __func__, fd,
 		    strerror(errno));
 	if (n != 1)
@@ -76,7 +85,7 @@ mm_send_fd(int socket, int fd)
 }
 
 int
-mm_receive_fd(int socket)
+mm_receive_fd(int sock)
 {
 #if defined(HAVE_RECVMSG) && (defined(HAVE_ACCRIGHTS_IN_MSGHDR) || defined(HAVE_CONTROL_IN_MSGHDR))
 	struct msghdr msg;
@@ -102,7 +111,7 @@ mm_receive_fd(int socket)
 	msg.msg_controllen = sizeof(tmp);
 #endif
 
-	if ((n = recvmsg(socket, &msg, 0)) == -1)
+	if ((n = recvmsg(sock, &msg, 0)) == -1)
 		fatal("%s: recvmsg: %s", __func__, strerror(errno));
 	if (n != 1)
 		fatal("%s: recvmsg: expected received 1 got %ld",
@@ -113,6 +122,8 @@ mm_receive_fd(int socket)
 		fatal("%s: no fd", __func__);
 #else
 	cmsg = CMSG_FIRSTHDR(&msg);
+	if (cmsg == NULL)
+		fatal("%s: no message header", __func__);
 #ifndef BROKEN_CMSG_TYPE
 	if (cmsg->cmsg_type != SCM_RIGHTS)
 		fatal("%s: expected type %d got %d", __func__,

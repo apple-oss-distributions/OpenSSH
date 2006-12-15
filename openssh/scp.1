@@ -9,7 +9,7 @@
 .\"
 .\" Created: Sun May  7 00:14:37 1995 ylo
 .\"
-.\" $OpenBSD: scp.1,v 1.33 2004/03/05 10:53:58 markus Exp $
+.\" $OpenBSD: scp.1,v 1.40 2006/07/18 07:56:28 jmc Exp $
 .\"
 .Dd September 25, 1999
 .Dt SCP 1
@@ -129,10 +129,13 @@ For full details of the options listed below, and their possible values, see
 .It Compression
 .It CompressionLevel
 .It ConnectionAttempts
-.It ConnectionTimeout
+.It ConnectTimeout
+.It ControlMaster
+.It ControlPath
 .It GlobalKnownHostsFile
 .It GSSAPIAuthentication
 .It GSSAPIDelegateCredentials
+.It HashKnownHosts
 .It Host
 .It HostbasedAuthentication
 .It HostKeyAlgorithms
@@ -140,6 +143,7 @@ For full details of the options listed below, and their possible values, see
 .It HostName
 .It IdentityFile
 .It IdentitiesOnly
+.It KbdInteractiveDevices
 .It LogLevel
 .It MACs
 .It NoHostAuthenticationForLocalhost
@@ -150,8 +154,10 @@ For full details of the options listed below, and their possible values, see
 .It Protocol
 .It ProxyCommand
 .It PubkeyAuthentication
+.It RekeyLimit
 .It RhostsRSAAuthentication
 .It RSAAuthentication
+.It SendEnv
 .It ServerAliveInterval
 .It ServerAliveCountMax
 .It SmartcardDevice
@@ -194,9 +200,8 @@ to print debugging messages about their progress.
 This is helpful in
 debugging connection, authentication, and configuration problems.
 .El
-.Sh DIAGNOSTICS
-.Nm
-exits with 0 on success or >0 if an error occurred.
+.Pp
+.Ex -std scp
 .Sh SEE ALSO
 .Xr rcp 1 ,
 .Xr sftp 1 ,

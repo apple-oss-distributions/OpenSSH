@@ -153,22 +153,31 @@ fi
 
 # Create /var/log and /var/log/lastlog if not already existing
 
-if [ -f ${LOCALSTATEDIR}/log ]
+if [ -e ${LOCALSTATEDIR}/log -a ! -d ${LOCALSTATEDIR}/log ]
 then
-  echo "Creating ${LOCALSTATEDIR}/log failed!"
-else
-  if [ ! -d ${LOCALSTATEDIR}/log ]
-  then
-    mkdir -p ${LOCALSTATEDIR}/log
-  fi
-  if [ -d ${LOCALSTATEDIR}/log/lastlog ]
-  then
-    chmod 777 ${LOCALSTATEDIR}/log/lastlog
-  elif [ ! -f ${LOCALSTATEDIR}/log/lastlog ]
-  then
-    cat /dev/null > ${LOCALSTATEDIR}/log/lastlog
-    chmod 666 ${LOCALSTATEDIR}/log/lastlog
-  fi
+  echo
+  echo "${LOCALSTATEDIR}/log is existant but not a directory."
+  echo "Cannot create ssh host configuration."
+  echo
+  exit 1
+fi
+if [ ! -e ${LOCALSTATEDIR}/log ]
+then
+  mkdir -p ${LOCALSTATEDIR}/log
+fi
+
+if [ -e ${LOCALSTATEDIR}/log/lastlog -a ! -f ${LOCALSTATEDIR}/log/lastlog ]
+then
+  echo 
+  echo "${LOCALSTATEDIR}/log/lastlog exists, but is not a file."
+  echo "Cannot create ssh host configuration."
+  echo 
+  exit 1
+fi
+if [ ! -e ${LOCALSTATEDIR}/log/lastlog ]
+then
+  cat /dev/null > ${LOCALSTATEDIR}/log/lastlog
+  chmod 644 ${LOCALSTATEDIR}/log/lastlog
 fi
 
 # Create /var/empty file used as chroot jail for privilege separation
@@ -449,12 +458,10 @@ then
 	  echo "Should this script create a new local account 'sshd_server' which has"
 	  if request "the required privileges?"
 	  then
-	    _admingroup=`awk -F: '{if ( $2 == "S-1-5-32-544" ) print $1;}' ${SYSCONFDIR}/group`
+	    _admingroup=`mkgroup -l | awk -F: '{if ( $2 == "S-1-5-32-544" ) print $1;}' `
 	    if [ -z "${_admingroup}" ]
 	    then
-	      echo "There's no group with SID S-1-5-32-544 (Local administrators group) in"
-	      echo "your ${SYSCONFDIR}/group file.  Please regenerate this entry using 'mkgroup -l'"
-	      echo "and restart this script."
+	      echo "mkgroup -l produces no group with SID S-1-5-32-544 (Local administrators group)."
 	      exit 1
 	    fi
 	    dos_var_empty=`cygpath -w ${LOCALSTATEDIR}/empty`
@@ -509,6 +516,7 @@ then
 	    fi
 	    editrights -a SeAssignPrimaryTokenPrivilege -u sshd_server &&
 	    editrights -a SeCreateTokenPrivilege -u sshd_server &&
+	    editrights -a SeTcbPrivilege -u sshd_server &&
 	    editrights -a SeDenyInteractiveLogonRight -u sshd_server &&
 	    editrights -a SeDenyNetworkLogonRight -u sshd_server &&
 	    editrights -a SeDenyRemoteInteractiveLogonRight -u sshd_server &&
@@ -553,14 +561,14 @@ then
       [ -z "${_cygwin}" ] && _cygwin="ntsec"
       if [ $_nt2003 -gt 0 -a "${sshd_server_in_sam}" = "yes" ]
       then
-	if cygrunsrv -I sshd -d "CYGWIN sshd" -p /usr/sbin/sshd -a -D -u sshd_server -w "${_password}" -e "CYGWIN=${_cygwin}"
+	if cygrunsrv -I sshd -d "CYGWIN sshd" -p /usr/sbin/sshd -a -D -u sshd_server -w "${_password}" -e "CYGWIN=${_cygwin}" -y tcpip
 	then
 	  echo
 	  echo "The service has been installed under sshd_server account."
 	  echo "To start the service, call \`net start sshd' or \`cygrunsrv -S sshd'."
 	fi
       else
-	if cygrunsrv -I sshd -d "CYGWIN sshd" -p /usr/sbin/sshd -a -D -e "CYGWIN=${_cygwin}"
+	if cygrunsrv -I sshd -d "CYGWIN sshd" -p /usr/sbin/sshd -a -D -e "CYGWIN=${_cygwin}" -y tcpip
 	then
 	  echo
 	  echo "The service has been installed under LocalSystem account."
@@ -580,10 +588,21 @@ then
       fi
       chown "${_user}" ${SYSCONFDIR}/ssh*
       chown "${_user}".544 ${LOCALSTATEDIR}/empty
+      chown "${_user}".544 ${LOCALSTATEDIR}/log/lastlog
       if [ -f ${LOCALSTATEDIR}/log/sshd.log ]
       then
 	chown "${_user}".544 ${LOCALSTATEDIR}/log/sshd.log
       fi
+    fi
+    if ! ( mount | egrep -q 'on /(|usr/(bin|lib)) type system' )
+    then
+      echo
+      echo "Warning: It appears that you have user mode mounts (\"Just me\""
+      echo "chosen during install.)  Any daemons installed as services will"
+      echo "fail to function unless system mounts are used.  To change this,"
+      echo "re-run setup.exe and choose \"All users\"."
+      echo
+      echo "For more information, see http://cygwin.com/faq/faq0.html#TOC33"
     fi
   fi
 fi

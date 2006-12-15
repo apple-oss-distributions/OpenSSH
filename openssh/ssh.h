@@ -1,4 +1,4 @@
-/*	$OpenBSD: ssh.h,v 1.75 2003/12/02 17:01:15 markus Exp $	*/
+/* $OpenBSD: ssh.h,v 1.78 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -11,18 +11,6 @@
  * incompatible with the protocol description in the RFC file, it must be
  * called by a name other than "ssh" or "Secure Shell".
  */
-
-#ifndef SSH_H
-#define SSH_H
-
-#include <netinet/in.h> /* For struct sockaddr_in */
-#include <pwd.h> /* For struct pw */
-#include <stdarg.h> /* For va_list */
-#include <syslog.h> /* For LOG_AUTH and friends */
-#include <sys/socket.h> /* For struct sockaddr_storage */
-#ifdef HAVE_SYS_SELECT_H
-# include <sys/select.h>
-#endif
 
 /* Cipher used for encrypting authentication files. */
 #define SSH_AUTHFILE_CIPHER	SSH_CIPHER_3DES
@@ -38,6 +26,13 @@
  * in configuration files or on the command line.
  */
 #define SSH_MAX_IDENTITY_FILES		100
+
+/*
+ * Maximum length of lines in authorized_keys file.
+ * Current value permits 16kbit RSA and RSA1 keys and 8kbit DSA keys, with
+ * some room for options and comments.
+ */
+#define SSH_MAX_PUBKEY_BYTES		8192
 
 /*
  * Major protocol version.  Different version indicates major incompatibility
@@ -105,5 +100,3 @@
 
 /* Listen backlog for sshd, ssh-agent and forwarding sockets */
 #define SSH_LISTEN_BACKLOG		128
-
-#endif				/* SSH_H */

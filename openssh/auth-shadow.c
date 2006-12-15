@@ -23,15 +23,21 @@
  */
 
 #include "includes.h"
-RCSID("$Id: auth-shadow.c,v 1.5 2004/02/21 23:22:05 dtucker Exp $");
 
 #if defined(USE_SHADOW) && defined(HAS_SHADOW_EXPIRE)
 #include <shadow.h>
+#include <stdarg.h>
+#include <string.h>
 
+#include "key.h"
+#include "hostfile.h"
 #include "auth.h"
 #include "buffer.h"
 #include "log.h"
 
+#ifdef DAY
+# undef DAY
+#endif
 #define DAY	(24L * 60 * 60) /* 1 day in seconds */
 
 extern Buffer loginmsg;
@@ -98,7 +104,7 @@ auth_shadow_pwexpired(Authctxt *ctxt)
 #if defined(__hpux) && !defined(HAVE_SECUREWARE)
 	if (iscomsec()) {
 		struct pr_passwd *pr;
-		       
+
 		pr = getprpwnam((char *)user);
 
 		/* Test for Trusted Mode expiry disabled */

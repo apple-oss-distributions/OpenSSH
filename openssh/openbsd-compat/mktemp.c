@@ -1,8 +1,7 @@
-/* OPENBSD ORIGINAL: lib/libc/stdio/mktemp.c */
-
 /* THIS FILE HAS BEEN MODIFIED FROM THE ORIGINAL OPENBSD SOURCE */
 /* Changes: Removed mktemp */
 
+/*	$OpenBSD: mktemp.c,v 1.19 2005/08/08 08:05:36 espie Exp $ */
 /*
  * Copyright (c) 1987, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,25 +31,24 @@
  * SUCH DAMAGE.
  */
 
+/* OPENBSD ORIGINAL: lib/libc/stdio/mktemp.c */
+
 #include "includes.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#include <fcntl.h>
+#include <ctype.h>
+#include <errno.h>
+#include <unistd.h>
+
 #if !defined(HAVE_MKDTEMP) || defined(HAVE_STRICT_MKSTEMP)
-
-#if defined(LIBC_SCCS) && !defined(lint)
-static char rcsid[] = "$OpenBSD: mktemp.c,v 1.17 2003/06/02 20:18:37 millert Exp $";
-#endif /* LIBC_SCCS and not lint */
-
-#ifdef HAVE_CYGWIN
-#define open binary_open
-extern int binary_open();
-#endif
 
 static int _gettemp(char *, int *, int, int);
 
 int
-mkstemps(path, slen)
-	char *path;
-	int slen;
+mkstemps(char *path, int slen)
 {
 	int fd;
 
@@ -58,8 +56,7 @@ mkstemps(path, slen)
 }
 
 int
-mkstemp(path)
-	char *path;
+mkstemp(char *path)
 {
 	int fd;
 
@@ -67,8 +64,7 @@ mkstemp(path)
 }
 
 char *
-mkdtemp(path)
-	char *path;
+mkdtemp(char *path)
 {
 	return(_gettemp(path, (int *)NULL, 1, 0) ? path : (char *)NULL);
 }
