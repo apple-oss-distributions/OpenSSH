@@ -1166,14 +1166,6 @@ bad:			run_err("%s: %s", np, strerror(errno));
 			    rename(md_src, md_dst);
 			} else
 			    unlink(md_src);
-			if (setimes && wrerr == NO) {
-				setimes = 0;
-				if (utimes(md_dst, tv) < 0) {
-					run_err("%s: set times: %s",
-					np, strerror(errno));
-					wrerr = DISPLAYED;
-				}
-			}
 		} else
 #endif
 		if (setimes && wrerr == NO) {
