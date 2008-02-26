@@ -1,7 +1,7 @@
-diff -ruN ../openssh.orig/Makefile.in ./Makefile.in
---- ../openssh.orig/Makefile.in	2006-10-23 14:44:47.000000000 -0700
-+++ ./Makefile.in	2007-08-05 17:33:59.000000000 -0700
-@@ -59,6 +59,7 @@
+diff -uNr ../openssh-4.7p1.orig/Makefile.in ./Makefile.in
+--- ../openssh-4.7p1.orig/Makefile.in	2007-06-10 21:01:42.000000000 -0700
++++ ./Makefile.in	2008-01-14 15:35:44.000000000 -0800
+@@ -56,6 +56,7 @@
  XAUTH_PATH=@XAUTH_PATH@
  LDFLAGS=-L. -Lopenbsd-compat/ @LDFLAGS@
  EXEEXT=@EXEEXT@
@@ -9,7 +9,7 @@ diff -ruN ../openssh.orig/Makefile.in ./Makefile.in
  
  INSTALL_SSH_PRNG_CMDS=@INSTALL_SSH_PRNG_CMDS@
  INSTALL_SSH_RAND_HELPER=@INSTALL_SSH_RAND_HELPER@
-@@ -91,6 +92,8 @@
+@@ -88,6 +89,8 @@
  	loginrec.o auth-pam.o auth-shadow.o auth-sia.o md5crypt.o \
  	audit.o audit-bsm.o platform.o
  
@@ -18,7 +18,7 @@ diff -ruN ../openssh.orig/Makefile.in ./Makefile.in
  MANPAGES	= scp.1.out ssh-add.1.out ssh-agent.1.out ssh-keygen.1.out ssh-keyscan.1.out ssh.1.out sshd.8.out sftp-server.8.out sftp.1.out ssh-rand-helper.8.out ssh-keysign.8.out sshd_config.5.out ssh_config.5.out
  MANPAGES_IN	= scp.1 ssh-add.1 ssh-agent.1 ssh-keygen.1 ssh-keyscan.1 ssh.1 sshd.8 sftp-server.8 sftp.1 ssh-rand-helper.8 ssh-keysign.8 sshd_config.5 ssh_config.5
  MANTYPE		= @MANTYPE@
-@@ -122,6 +125,7 @@
+@@ -119,6 +122,7 @@
  $(LIBSSH_OBJS): Makefile.in config.h
  $(SSHOBJS): Makefile.in config.h
  $(SSHDOBJS): Makefile.in config.h
@@ -26,7 +26,7 @@ diff -ruN ../openssh.orig/Makefile.in ./Makefile.in
  
  .c.o:
  	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
-@@ -135,8 +139,8 @@
+@@ -132,8 +136,8 @@
  	$(AR) rv $@ $(LIBSSH_OBJS)
  	$(RANLIB) $@
  
@@ -36,8 +36,8 @@ diff -ruN ../openssh.orig/Makefile.in ./Makefile.in
 +	$(LD) -o $@ $(SSHOBJS) $(KEYCHAINOBJS) $(LDFLAGS) $(KEYCHAIN_LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
  
  sshd$(EXEEXT): libssh.a	$(LIBCOMPAT) $(SSHDOBJS)
- 	$(LD) -o $@ $(SSHDOBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBWRAP) $(LIBPAM) $(LIBSELINUX) $(SSHDLIBS) $(LIBS)
-@@ -144,11 +148,11 @@
+ 	$(LD) -o $@ $(SSHDOBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(SSHDLIBS) $(LIBS)
+@@ -141,11 +145,11 @@
  scp$(EXEEXT): $(LIBCOMPAT) libssh.a scp.o progressmeter.o
  	$(LD) -o $@ scp.o progressmeter.o bufaux.o $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
  
@@ -53,9 +53,9 @@ diff -ruN ../openssh.orig/Makefile.in ./Makefile.in
  
  ssh-keygen$(EXEEXT): $(LIBCOMPAT) libssh.a ssh-keygen.o
  	$(LD) -o $@ ssh-keygen.o $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
-diff -ruN ../openssh.orig/authfd.c ./authfd.c
---- ../openssh.orig/authfd.c	2006-08-31 22:38:36.000000000 -0700
-+++ ./authfd.c	2007-08-05 17:33:59.000000000 -0700
+diff -uNr ../openssh-4.7p1.orig/authfd.c ./authfd.c
+--- ../openssh-4.7p1.orig/authfd.c	2006-08-31 22:38:36.000000000 -0700
++++ ./authfd.c	2008-01-14 15:35:44.000000000 -0800
 @@ -652,6 +652,29 @@
  	return decode_reply(type);
  }
@@ -86,9 +86,9 @@ diff -ruN ../openssh.orig/authfd.c ./authfd.c
  int
  decode_reply(int type)
  {
-diff -ruN ../openssh.orig/authfd.h ./authfd.h
---- ../openssh.orig/authfd.h	2006-08-04 19:39:39.000000000 -0700
-+++ ./authfd.h	2007-08-05 17:33:59.000000000 -0700
+diff -uNr ../openssh-4.7p1.orig/authfd.h ./authfd.h
+--- ../openssh-4.7p1.orig/authfd.h	2006-08-04 19:39:39.000000000 -0700
++++ ./authfd.h	2008-01-14 15:35:44.000000000 -0800
 @@ -49,6 +49,9 @@
  #define SSH2_AGENTC_ADD_ID_CONSTRAINED		25
  #define SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED 26
@@ -99,10 +99,10 @@ diff -ruN ../openssh.orig/authfd.h ./authfd.h
  #define	SSH_AGENT_CONSTRAIN_LIFETIME		1
  #define	SSH_AGENT_CONSTRAIN_CONFIRM		2
  
-diff -ruN ../openssh.orig/configure ./configure
---- ../openssh.orig/configure	2006-11-07 05:07:18.000000000 -0800
-+++ ./configure	2007-08-05 17:33:59.000000000 -0700
-@@ -711,6 +711,7 @@
+diff -uNr ../openssh-4.7p1.orig/configure ./configure
+--- ../openssh-4.7p1.orig/configure	2007-09-03 23:50:09.000000000 -0700
++++ ./configure	2008-01-14 15:35:44.000000000 -0800
+@@ -723,6 +723,7 @@
  mansubdir
  user_path
  piddir
@@ -110,7 +110,7 @@ diff -ruN ../openssh.orig/configure ./configure
  LIBOBJS
  LTLIBOBJS'
  ac_subst_files=''
-@@ -1349,6 +1350,7 @@
+@@ -1363,6 +1364,7 @@
    --with-bsd-auth         Enable BSD auth support
    --with-pid-dir=PATH     Specify location of ssh.pid file
    --with-lastlog=FILE|DIR specify lastlog location common locations
@@ -118,7 +118,7 @@ diff -ruN ../openssh.orig/configure ./configure
  
  Some influential environment variables:
    CC          C compiler command
-@@ -7754,6 +7756,7 @@
+@@ -7113,6 +7115,7 @@
  #define SSH_TUN_PREPEND_AF 1
  _ACEOF
  
@@ -126,7 +126,7 @@ diff -ruN ../openssh.orig/configure ./configure
  	;;
  *-*-dragonfly*)
  	SSHDLIBS="$SSHDLIBS -lcrypt"
-@@ -32166,6 +32169,181 @@
+@@ -28387,6 +28390,181 @@
  echo "$as_me: WARNING: Please check and edit blibpath in LDFLAGS in Makefile" >&2;}
  fi
  
@@ -308,15 +308,15 @@ diff -ruN ../openssh.orig/configure ./configure
  CFLAGS="$CFLAGS $werror_flags"
  
  
-@@ -32916,7 +33094,6 @@
- CEOF$ac_eof
+@@ -29012,7 +29190,6 @@
  _ACEOF
+ 
  
 -
  ac_delim='%!_!# '
  for ac_last_try in false false false false false :; do
    cat >conf$$subs.sed <<_ACEOF
-@@ -32933,11 +33110,12 @@
+@@ -29164,11 +29341,12 @@
  mansubdir!$mansubdir$ac_delim
  user_path!$user_path$ac_delim
  piddir!$piddir$ac_delim
@@ -325,15 +325,15 @@ diff -ruN ../openssh.orig/configure ./configure
  LTLIBOBJS!$LTLIBOBJS$ac_delim
  _ACEOF
  
--  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 15; then
-+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 16; then
+-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 12; then
++  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 13; then
      break
    elif $ac_last_try; then
      { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5
-diff -ruN ../openssh.orig/configure.ac ./configure.ac
---- ../openssh.orig/configure.ac	2006-10-06 16:07:21.000000000 -0700
-+++ ./configure.ac	2007-08-05 17:33:59.000000000 -0700
-@@ -403,6 +403,7 @@
+diff -uNr ../openssh-4.7p1.orig/configure.ac ./configure.ac
+--- ../openssh-4.7p1.orig/configure.ac	2007-08-09 21:36:12.000000000 -0700
++++ ./configure.ac	2008-01-14 15:35:44.000000000 -0800
+@@ -412,6 +412,7 @@
  	    [Use tunnel device compatibility to OpenBSD])
  	AC_DEFINE(SSH_TUN_PREPEND_AF, 1,
  	    [Prepend the address family to IP tunnel traffic])
@@ -341,7 +341,7 @@ diff -ruN ../openssh.orig/configure.ac ./configure.ac
  	;;
  *-*-dragonfly*)
  	SSHDLIBS="$SSHDLIBS -lcrypt"
-@@ -3915,6 +3916,33 @@
+@@ -3978,6 +3979,33 @@
  	AC_MSG_WARN([Please check and edit blibpath in LDFLAGS in Makefile])
  fi
  
@@ -375,10 +375,10 @@ diff -ruN ../openssh.orig/configure.ac ./configure.ac
  dnl Adding -Werror to CFLAGS early prevents configure tests from running.
  dnl Add now.
  CFLAGS="$CFLAGS $werror_flags"
-diff -ruN ../openssh.orig/keychain.c ./keychain.c
---- ../openssh.orig/keychain.c	1969-12-31 16:00:00.000000000 -0800
-+++ ./keychain.c	2007-08-06 14:17:26.000000000 -0700
-@@ -0,0 +1,660 @@
+diff -uNr ../openssh-4.7p1.orig/keychain.c ./keychain.c
+--- ../openssh-4.7p1.orig/keychain.c	1969-12-31 16:00:00.000000000 -0800
++++ ./keychain.c	2008-01-14 15:37:23.000000000 -0800
+@@ -0,0 +1,666 @@
 +/*
 + * Copyright (c) 2007 Apple Inc. All rights reserved.
 + *
@@ -477,7 +477,7 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +
 +	CFStringRef cfstr_relative_filename = NULL;
 +	CFURLRef cfurl_relative_filename = NULL, cfurl_filename = NULL;
-+	CFStringRef cfstr_filename;
++	CFStringRef cfstr_filename = NULL;
 +	CFDataRef cfdata_filename = NULL;
 +	CFIndex filename_len;
 +	UInt8 *label = NULL;
@@ -513,7 +513,7 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +	}
 +	if ((cfstr_filename = CFURLCopyFileSystemPath(cfurl_filename,
 +	    kCFURLPOSIXPathStyle)) == NULL) {
-+		fprintf(stderr, "CFURLGetString failed\n");
++		fprintf(stderr, "CFURLCopyFileSystemPath failed\n");
 +		goto err;
 +	}
 +	if ((cfdata_filename = CFStringCreateExternalRepresentation(NULL,
@@ -586,6 +586,8 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +		CFRelease(cfurl_relative_filename);
 +	if (cfurl_filename)
 +		CFRelease(cfurl_filename);
++	if (cfstr_filename)
++		CFRelease(cfstr_filename);
 +	if (cfdata_filename)
 +		CFRelease(cfdata_filename);
 +	if (label)
@@ -632,7 +634,7 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +
 +	CFStringRef cfstr_relative_filename = NULL;
 +	CFURLRef cfurl_relative_filename = NULL, cfurl_filename = NULL;
-+	CFStringRef cfstr_filename;
++	CFStringRef cfstr_filename = NULL;
 +	CFDataRef cfdata_filename = NULL;
 +	CFIndex filename_len;
 +	const UInt8 *utf8_filename;
@@ -664,7 +666,7 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +	}
 +	if ((cfstr_filename = CFURLCopyFileSystemPath(cfurl_filename,
 +	    kCFURLPOSIXPathStyle)) == NULL) {
-+		fprintf(stderr, "CFURLGetString failed\n");
++		fprintf(stderr, "CFURLCopyFileSystemPath failed\n");
 +		goto err;
 +	}
 +	if ((cfdata_filename = CFStringCreateExternalRepresentation(NULL,
@@ -694,6 +696,8 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +		CFRelease(cfurl_relative_filename);
 +	if (cfurl_filename)
 +		CFRelease(cfurl_filename);
++	if (cfstr_filename)
++		CFRelease(cfstr_filename);
 +	if (cfdata_filename)
 +		CFRelease(cfdata_filename);
 +	if (itemRef)
@@ -837,7 +841,7 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +
 +	CFStringRef cfstr_relative_filename = NULL;
 +	CFURLRef cfurl_relative_filename = NULL, cfurl_filename = NULL;
-+	CFStringRef cfstr_filename;
++	CFStringRef cfstr_filename = NULL;
 +	CFDataRef cfdata_filename = NULL;
 +	CFIndex filename_len;
 +	UInt8 *label = NULL;
@@ -887,7 +891,7 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +	}
 +	if ((cfstr_filename = CFURLCopyFileSystemPath(cfurl_filename,
 +	    kCFURLPOSIXPathStyle)) == NULL) {
-+		fprintf(stderr, "CFURLGetString failed\n");
++		fprintf(stderr, "CFURLCopyFileSystemPath failed\n");
 +		goto err;
 +	}
 +	if ((cfdata_filename = CFStringCreateExternalRepresentation(NULL,
@@ -994,6 +998,8 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +		CFRelease(cfurl_relative_filename);
 +	if (cfurl_filename)
 +		CFRelease(cfurl_filename);
++	if (cfstr_filename)
++		CFRelease(cfstr_filename);
 +	if (cfdata_filename)
 +		CFRelease(cfdata_filename);
 +	if (label)
@@ -1039,9 +1045,9 @@ diff -ruN ../openssh.orig/keychain.c ./keychain.c
 +#endif
 +
 +}
-diff -ruN ../openssh.orig/keychain.h ./keychain.h
---- ../openssh.orig/keychain.h	1969-12-31 16:00:00.000000000 -0800
-+++ ./keychain.h	2007-08-05 17:33:59.000000000 -0700
+diff -uNr ../openssh-4.7p1.orig/keychain.h ./keychain.h
+--- ../openssh-4.7p1.orig/keychain.h	1969-12-31 16:00:00.000000000 -0800
++++ ./keychain.h	2008-01-14 15:38:05.000000000 -0800
 @@ -0,0 +1,45 @@
 +/*
 + * Copyright (c) 2007 Apple Inc. All rights reserved.
@@ -1088,10 +1094,24 @@ diff -ruN ../openssh.orig/keychain.h ./keychain.h
 +int	 add_identities_using_keychain(
 +	     int (*add_identity)(const char *, const char *));
 +char	*keychain_read_passphrase(const char *filename);
-diff -ruN ../openssh.orig/ssh-add.0 ./ssh-add.0
---- ../openssh.orig/ssh-add.0	2006-11-07 05:07:19.000000000 -0800
-+++ ./ssh-add.0	2007-08-05 17:33:59.000000000 -0700
-@@ -54,6 +54,13 @@
+diff -uNr ../openssh-4.7p1.orig/ssh-add.0 ./ssh-add.0
+--- ../openssh-4.7p1.orig/ssh-add.0	2007-09-03 23:50:09.000000000 -0700
++++ ./ssh-add.0	2008-01-14 15:35:44.000000000 -0800
+@@ -1,10 +1,10 @@
+-SSH-ADD(1)                 OpenBSD Reference Manual                 SSH-ADD(1)
++SSH-ADD(1)                BSD General Commands Manual               SSH-ADD(1)
+ 
+ NAME
+-     ssh-add - adds RSA or DSA identities to the authentication agent
++     ssh-add -- adds RSA or DSA identities to the authentication agent
+ 
+ SYNOPSIS
+-     ssh-add [-cDdLlXx] [-t life] [file ...]
++     ssh-add [-cDdLlXxKk] [-t life] [file ...]
+      ssh-add -s reader
+      ssh-add -e reader
+ 
+@@ -58,6 +58,13 @@
  
       -x      Lock the agent with a password.
  
@@ -1105,16 +1125,25 @@ diff -ruN ../openssh.orig/ssh-add.0 ./ssh-add.0
  ENVIRONMENT
       DISPLAY and SSH_ASKPASS
               If ssh-add needs a passphrase, it will read the passphrase from
-@@ -99,4 +106,4 @@
+@@ -103,4 +110,4 @@
       ated OpenSSH.  Markus Friedl contributed the support for SSH protocol
       versions 1.5 and 2.0.
  
--OpenBSD 4.0                   September 25, 1999                             2
+-OpenBSD 4.2                      June 12, 2007                               2
 +BSD                           September 25, 1999                           BSD
-diff -ruN ../openssh.orig/ssh-add.1 ./ssh-add.1
---- ../openssh.orig/ssh-add.1	2005-05-25 19:04:02.000000000 -0700
-+++ ./ssh-add.1	2007-08-05 17:33:59.000000000 -0700
-@@ -110,6 +110,12 @@
+diff -uNr ../openssh-4.7p1.orig/ssh-add.1 ./ssh-add.1
+--- ../openssh-4.7p1.orig/ssh-add.1	2007-06-12 07:00:27.000000000 -0700
++++ ./ssh-add.1	2008-01-14 15:35:44.000000000 -0800
+@@ -45,7 +45,7 @@
+ .Nd adds RSA or DSA identities to the authentication agent
+ .Sh SYNOPSIS
+ .Nm ssh-add
+-.Op Fl cDdLlXx
++.Op Fl cDdLlXxKk
+ .Op Fl t Ar life
+ .Op Ar
+ .Nm ssh-add
+@@ -121,6 +121,12 @@
  Unlock the agent.
  .It Fl x
  Lock the agent with a password.
@@ -1127,9 +1156,9 @@ diff -ruN ../openssh.orig/ssh-add.1 ./ssh-add.1
  .El
  .Sh ENVIRONMENT
  .Bl -tag -width Ds
-diff -ruN ../openssh.orig/ssh-add.c ./ssh-add.c
---- ../openssh.orig/ssh-add.c	2006-08-31 22:38:37.000000000 -0700
-+++ ./ssh-add.c	2007-08-05 17:33:59.000000000 -0700
+diff -uNr ../openssh-4.7p1.orig/ssh-add.c ./ssh-add.c
+--- ../openssh-4.7p1.orig/ssh-add.c	2006-08-31 22:38:37.000000000 -0700
++++ ./ssh-add.c	2008-01-14 15:35:44.000000000 -0800
 @@ -61,6 +61,7 @@
  #include "authfile.h"
  #include "pathnames.h"
@@ -1282,9 +1311,9 @@ diff -ruN ../openssh.orig/ssh-add.c ./ssh-add.c
  				ret = 1;
  		}
  	}
-diff -ruN ../openssh.orig/ssh-agent.c ./ssh-agent.c
---- ../openssh.orig/ssh-agent.c	2006-10-23 10:01:16.000000000 -0700
-+++ ./ssh-agent.c	2007-08-05 17:33:59.000000000 -0700
+diff -uNr ../openssh-4.7p1.orig/ssh-agent.c ./ssh-agent.c
+--- ../openssh-4.7p1.orig/ssh-agent.c	2007-03-21 02:45:07.000000000 -0700
++++ ./ssh-agent.c	2008-01-14 15:35:44.000000000 -0800
 @@ -71,9 +71,11 @@
  #include "buffer.h"
  #include "key.h"
@@ -1297,7 +1326,7 @@ diff -ruN ../openssh.orig/ssh-agent.c ./ssh-agent.c
  
  #ifdef SMARTCARD
  #include "scard.h"
-@@ -690,6 +692,61 @@
+@@ -701,6 +703,61 @@
  }
  #endif /* SMARTCARD */
  
@@ -1359,7 +1388,7 @@ diff -ruN ../openssh.orig/ssh-agent.c ./ssh-agent.c
  /* dispatch incoming messages */
  
  static void
-@@ -785,6 +842,9 @@
+@@ -793,6 +850,9 @@
  		process_remove_smartcard_key(e);
  		break;
  #endif /* SMARTCARD */
@@ -1369,7 +1398,7 @@ diff -ruN ../openssh.orig/ssh-agent.c ./ssh-agent.c
  	default:
  		/* Unknown message.  Respond with failure. */
  		error("Unknown message %d", type);
-@@ -1241,6 +1301,10 @@
+@@ -1256,6 +1316,10 @@
  	signal(SIGTERM, cleanup_handler);
  	nalloc = 0;
  
@@ -1378,11 +1407,11 @@ diff -ruN ../openssh.orig/ssh-agent.c ./ssh-agent.c
 +#endif
 +
  	while (1) {
- 		prepare_select(&readsetp, &writesetp, &max_fd, &nalloc);
- 		if (select(max_fd + 1, readsetp, writesetp, NULL, NULL) < 0) {
-diff -ruN ../openssh.orig/sshconnect1.c ./sshconnect1.c
---- ../openssh.orig/sshconnect1.c	2006-11-07 04:14:42.000000000 -0800
-+++ ./sshconnect1.c	2007-08-05 17:33:59.000000000 -0700
+ 		prepare_select(&readsetp, &writesetp, &max_fd, &nalloc, &tvp);
+ 		result = select(max_fd + 1, readsetp, writesetp, NULL, tvp);
+diff -uNr ../openssh-4.7p1.orig/sshconnect1.c ./sshconnect1.c
+--- ../openssh-4.7p1.orig/sshconnect1.c	2006-11-07 04:14:42.000000000 -0800
++++ ./sshconnect1.c	2008-01-14 15:35:44.000000000 -0800
 @@ -47,6 +47,7 @@
  #include "canohost.h"
  #include "hostfile.h"
@@ -1402,10 +1431,10 @@ diff -ruN ../openssh.orig/sshconnect1.c ./sshconnect1.c
  			if (strcmp(passphrase, "") != 0) {
  				private = key_load_private_type(KEY_RSA1,
  				    authfile, passphrase, NULL, NULL);
-diff -ruN ../openssh.orig/sshconnect2.c ./sshconnect2.c
---- ../openssh.orig/sshconnect2.c	2006-08-31 22:38:37.000000000 -0700
-+++ ./sshconnect2.c	2007-08-05 17:33:59.000000000 -0700
-@@ -63,6 +63,7 @@
+diff -uNr ../openssh-4.7p1.orig/sshconnect2.c ./sshconnect2.c
+--- ../openssh-4.7p1.orig/sshconnect2.c	2007-05-19 22:11:33.000000000 -0700
++++ ./sshconnect2.c	2008-01-14 15:35:44.000000000 -0800
+@@ -64,6 +64,7 @@
  #include "msg.h"
  #include "pathnames.h"
  #include "uidswap.h"
@@ -1413,7 +1442,7 @@ diff -ruN ../openssh.orig/sshconnect2.c ./sshconnect2.c
  
  #ifdef GSSAPI
  #include "ssh-gss.h"
-@@ -989,7 +990,9 @@
+@@ -990,7 +991,9 @@
  		snprintf(prompt, sizeof prompt,
  		    "Enter passphrase for key '%.100s': ", filename);
  		for (i = 0; i < options.number_of_password_prompts; i++) {
