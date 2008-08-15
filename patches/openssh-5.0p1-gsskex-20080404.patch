@@ -1,7 +1,35 @@
-diff -uNr ../openssh-4.7p1.orig/ChangeLog.gssapi ./ChangeLog.gssapi
---- ../openssh-4.7p1.orig/ChangeLog.gssapi	1969-12-31 16:00:00.000000000 -0800
-+++ ./ChangeLog.gssapi	2007-09-06 16:49:14.000000000 -0700
-@@ -0,0 +1,60 @@
+? gss-genr.c.pre14
+? kex.c.pre14
+? kex.h.pre14
+? kexgssc.c.pre14
+? kexgsss.c.pre14
+? monitor.c.pre14
+? new.patch
+? ssh-gss.h.pre14
+? sshconnect2.c.pre14
+? sshd.c.pre14
+Index: ChangeLog.gssapi
+===================================================================
+RCS file: ChangeLog.gssapi
+diff -N ChangeLog.gssapi
+--- /dev/null	1 Jan 1970 00:00:00 -0000
++++ ChangeLog.gssapi	4 Apr 2008 12:52:27 -0000
+@@ -0,0 +1,75 @@
++20080404
++  - [ gss-serv.c ]
++    Add code to actually implement GSSAPIStrictAcceptCheck, which had somehow
++    been omitted from a previous version of this patch. Reported by Borislav
++    Stoichkov
++
++20070317
++  - [ gss-serv-krb5.c ]
++    Remove C99ism, where new_ccname was being declared in the middle of a 
++    function
++
++20061220
++  - [ servconf.c ]
++    Make default for GSSAPIStrictAcceptorCheck be Yes, to match previous, and 
++    documented, behaviour. Reported by Dan Watson.
 +
 +20060910
 +  - [ gss-genr.c kexgssc.c kexgsss.c kex.h monitor.c sshconnect2.c sshd.c
@@ -62,9 +90,13 @@ diff -uNr ../openssh-4.7p1.orig/ChangeLog.gssapi ./ChangeLog.gssapi
 +    add support for GssapiTrustDns option for gssapi-with-mic
 +    (from jbasney AT ncsa.uiuc.edu)
 +    <gssapi-with-mic support is Bugzilla #1008>
-diff -uNr ../openssh-4.7p1.orig/Makefile.in ./Makefile.in
---- ../openssh-4.7p1.orig/Makefile.in	2007-06-10 21:01:42.000000000 -0700
-+++ ./Makefile.in	2007-09-06 16:50:06.000000000 -0700
+Index: Makefile.in
+===================================================================
+RCS file: /cvs/openssh/Makefile.in,v
+retrieving revision 1.289
+diff -u -r1.289 Makefile.in
+--- Makefile.in	13 Mar 2008 01:41:31 -0000	1.289
++++ Makefile.in	4 Apr 2008 12:52:27 -0000
 @@ -71,7 +71,7 @@
  	atomicio.o key.o dispatch.o kex.o mac.o uidswap.o uuencode.o misc.o \
  	monitor_fdpass.o rijndael.o ssh-dss.o ssh-rsa.o dh.o kexdh.o \
@@ -79,13 +111,17 @@ diff -uNr ../openssh-4.7p1.orig/Makefile.in ./Makefile.in
  	monitor_mm.o monitor.o monitor_wrap.o kexdhs.o kexgexs.o \
  	auth-krb5.o \
 -	auth2-gss.o gss-serv.o gss-serv-krb5.o \
-+	auth2-gss.o gss-serv.o gss-serv-krb5.o kexgsss.o \
++	auth2-gss.o gss-serv.o gss-serv-krb5.o kexgsss.o\
  	loginrec.o auth-pam.o auth-shadow.o auth-sia.o md5crypt.o \
- 	audit.o audit-bsm.o platform.o
+ 	audit.o audit-bsm.o platform.o sftp-server.o sftp-common.o
  
-diff -uNr ../openssh-4.7p1.orig/auth-krb5.c ./auth-krb5.c
---- ../openssh-4.7p1.orig/auth-krb5.c	2006-08-04 19:39:39.000000000 -0700
-+++ ./auth-krb5.c	2007-09-06 16:53:16.000000000 -0700
+Index: auth-krb5.c
+===================================================================
+RCS file: /cvs/openssh/auth-krb5.c,v
+retrieving revision 1.35
+diff -u -r1.35 auth-krb5.c
+--- auth-krb5.c	5 Aug 2006 02:39:39 -0000	1.35
++++ auth-krb5.c	4 Apr 2008 12:52:28 -0000
 @@ -166,8 +166,13 @@
  
  	len = strlen(authctxt->krb5_ticket_file) + 6;
@@ -133,20 +169,28 @@ diff -uNr ../openssh-4.7p1.orig/auth-krb5.c ./auth-krb5.c
  
  	return (krb5_cc_resolve(ctx, ccname, ccache));
  }
-diff -uNr ../openssh-4.7p1.orig/auth.h ./auth.h
---- ../openssh-4.7p1.orig/auth.h	2006-08-18 07:32:46.000000000 -0700
-+++ ./auth.h	2007-09-06 16:53:48.000000000 -0700
+Index: auth.h
+===================================================================
+RCS file: /cvs/openssh/auth.h,v
+retrieving revision 1.78
+diff -u -r1.78 auth.h
+--- auth.h	26 Oct 2007 04:25:13 -0000	1.78
++++ auth.h	4 Apr 2008 12:52:28 -0000
 @@ -53,6 +53,7 @@
  	int		 valid;		/* user exists and is allowed to login */
  	int		 attempt;
  	int		 failures;
-+	int		 server_caused_failure;
++	int		 server_caused_failure; 
  	int		 force_pwchange;
  	char		*user;		/* username sent by the client */
  	char		*service;
-diff -uNr ../openssh-4.7p1.orig/auth2-gss.c ./auth2-gss.c
---- ../openssh-4.7p1.orig/auth2-gss.c	2006-08-31 22:38:36.000000000 -0700
-+++ ./auth2-gss.c	2007-09-06 16:55:30.000000000 -0700
+Index: auth2-gss.c
+===================================================================
+RCS file: /cvs/openssh/auth2-gss.c,v
+retrieving revision 1.19
+diff -u -r1.19 auth2-gss.c
+--- auth2-gss.c	2 Dec 2007 11:59:45 -0000	1.19
++++ auth2-gss.c	4 Apr 2008 12:52:28 -0000
 @@ -52,6 +52,39 @@
  static void input_gssapi_exchange_complete(int type, u_int32_t plen, void *ctxt);
  static void input_gssapi_errtok(int, u_int32_t, void *);
@@ -203,22 +247,26 @@ diff -uNr ../openssh-4.7p1.orig/auth2-gss.c ./auth2-gss.c
  		return (0);
  	}
  
-@@ -292,6 +327,12 @@
+@@ -291,6 +326,12 @@
+ 	dispatch_set(SSH2_MSG_USERAUTH_GSSAPI_EXCHANGE_COMPLETE, NULL);
  	userauth_finish(authctxt, authenticated, "gssapi-with-mic");
  }
- 
++
 +Authmethod method_gsskeyex = {
 +	"gssapi-keyex",
 +	userauth_gsskeyex,
 +	&options.gss_authentication
 +};
-+
+ 
  Authmethod method_gssapi = {
  	"gssapi-with-mic",
- 	userauth_gssapi,
-diff -uNr ../openssh-4.7p1.orig/auth2.c ./auth2.c
---- ../openssh-4.7p1.orig/auth2.c	2007-05-19 21:58:41.000000000 -0700
-+++ ./auth2.c	2007-09-06 23:56:29.000000000 -0700
+Index: auth2.c
+===================================================================
+RCS file: /cvs/openssh/auth2.c,v
+retrieving revision 1.145
+diff -u -r1.145 auth2.c
+--- auth2.c	26 Oct 2007 04:26:16 -0000	1.145
++++ auth2.c	4 Apr 2008 12:52:28 -0000
 @@ -64,6 +64,7 @@
  extern Authmethod method_kbdint;
  extern Authmethod method_hostbased;
@@ -235,7 +283,7 @@ diff -uNr ../openssh-4.7p1.orig/auth2.c ./auth2.c
  	&method_gssapi,
  #endif
  	&method_passwd,
-@@ -195,6 +197,7 @@
+@@ -194,6 +196,7 @@
  #endif
  
  	authctxt->postponed = 0;
@@ -243,25 +291,27 @@ diff -uNr ../openssh-4.7p1.orig/auth2.c ./auth2.c
  
  	/* try to authenticate user */
  	m = authmethod_lookup(method);
-@@ -265,7 +268,9 @@
- 		/* now we can break out */
- 		authctxt->success = 1;
+@@ -336,7 +339,8 @@
  	} else {
--		if (authctxt->failures++ > options.max_authtries) {
-+		/* Dont count server configuration issues against the client */
-+		if (!authctxt->server_caused_failure && 
-+		    authctxt->failures++ > options.max_authtries) {
+ 
+ 		/* Allow initial try of "none" auth without failure penalty */
+-		if (authctxt->attempt > 1 || strcmp(method, "none") != 0)
++		if ((authctxt->attempt > 1 || strcmp(method, "none") != 0)
++			&& !authctxt->server_caused_failure) /* Dont count server configuration issues against the client */
+ 			authctxt->failures++;
+ 		if (authctxt->failures >= options.max_authtries) {
  #ifdef SSH_AUDIT_EVENTS
- 			PRIVSEP(audit_event(SSH_LOGIN_EXCEED_MAXTRIES));
- #endif
-diff -uNr ../openssh-4.7p1.orig/configure.ac ./configure.ac
---- ../openssh-4.7p1.orig/configure.ac	2007-08-09 21:36:12.000000000 -0700
-+++ ./configure.ac	2007-09-06 17:57:26.000000000 -0700
-@@ -412,7 +412,31 @@
+Index: configure.ac
+===================================================================
+RCS file: /cvs/openssh/configure.ac,v
+retrieving revision 1.397
+diff -u -r1.397 configure.ac
+--- configure.ac	27 Mar 2008 01:33:07 -0000	1.397
++++ configure.ac	4 Apr 2008 12:52:29 -0000
+@@ -459,6 +459,30 @@
  	    [Use tunnel device compatibility to OpenBSD])
  	AC_DEFINE(SSH_TUN_PREPEND_AF, 1,
  	    [Prepend the address family to IP tunnel traffic])
--	;;
 +	AC_MSG_CHECKING(if we have the Security Authorization Session API)
 +	AC_TRY_COMPILE([#include <Security/AuthSession.h>],
 +		[SessionCreate(0, 0);],
@@ -286,14 +336,17 @@ diff -uNr ../openssh-4.7p1.orig/configure.ac ./configure.ac
 +		fi],
 +		[AC_MSG_RESULT(no)]
 +	)
-+  	;;
- *-*-dragonfly*)
- 	SSHDLIBS="$SSHDLIBS -lcrypt"
- 	;;
-diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
---- ../openssh-4.7p1.orig/gss-genr.c	2007-06-12 06:44:36.000000000 -0700
-+++ ./gss-genr.c	2007-09-06 18:07:26.000000000 -0700
-@@ -39,12 +39,159 @@
+ 	m4_pattern_allow(AU_IPv)
+ 	AC_CHECK_DECL(AU_IPv4, [], 
+ 	    AC_DEFINE(AU_IPv4, 0, [System only supports IPv4 audit records])
+Index: gss-genr.c
+===================================================================
+RCS file: /cvs/openssh/gss-genr.c,v
+retrieving revision 1.21
+diff -u -r1.21 gss-genr.c
+--- gss-genr.c	12 Jun 2007 13:44:36 -0000	1.21
++++ gss-genr.c	4 Apr 2008 12:52:29 -0000
+@@ -39,12 +39,160 @@
  #include "buffer.h"
  #include "log.h"
  #include "ssh2.h"
@@ -362,7 +415,7 @@ diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
 +		xfree(gss_enc2oid);
 +	}
 +
-+	gss_enc2oid = xmalloc(sizeof(ssh_gss_kex_mapping)*
++	gss_enc2oid = xmalloc(sizeof(ssh_gss_kex_mapping) *
 +	    (gss_supported->count + 1));
 +
 +	buffer_init(&buf);
@@ -371,6 +424,7 @@ diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
 +	for (i = 0; i < gss_supported->count; i++) {
 +		if (gss_supported->elements[i].length < 128 &&
 +		    (*check)(NULL, &(gss_supported->elements[i]), data)) {
++
 +			deroid[0] = SSH_GSS_OIDTYPE;
 +			deroid[1] = gss_supported->elements[i].length;
 +
@@ -453,7 +507,7 @@ diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
  /* Check that the OID in a data stream matches that in the context */
  int
  ssh_gssapi_check_oid(Gssctxt *ctx, void *data, size_t len)
-@@ -229,6 +376,9 @@
+@@ -229,6 +377,9 @@
  OM_uint32
  ssh_gssapi_sign(Gssctxt *ctx, gss_buffer_t buffer, gss_buffer_t hash)
  {
@@ -463,7 +517,7 @@ diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
  	if ((ctx->major = gss_get_mic(&ctx->minor, ctx->context,
  	    GSS_C_QOP_DEFAULT, buffer, hash)))
  		ssh_gssapi_error(ctx);
-@@ -236,6 +386,19 @@
+@@ -236,6 +387,19 @@
  	return (ctx->major);
  }
  
@@ -476,14 +530,14 @@ diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
 +
 +	ctx->major = gss_verify_mic(&ctx->minor, ctx->context,
 +	    gssbuf, gssmic, NULL);
-+ 
-+ 	return (ctx->major);
++
++	return (ctx->major);
 +}
 +
  void
  ssh_gssapi_buildmic(Buffer *b, const char *user, const char *service,
      const char *context)
-@@ -254,6 +417,10 @@
+@@ -254,6 +418,10 @@
  	gss_buffer_desc token = GSS_C_EMPTY_BUFFER;
  	OM_uint32 major, minor;
  	gss_OID_desc spnego_oid = {6, (void *)"\x2B\x06\x01\x05\x05\x02"};
@@ -494,24 +548,36 @@ diff -uNr ../openssh-4.7p1.orig/gss-genr.c ./gss-genr.c
  
  	/* RFC 4462 says we MUST NOT do SPNEGO */
  	if (oid->length == spnego_oid.length && 
-@@ -272,7 +439,7 @@
+@@ -272,7 +440,7 @@
  			    GSS_C_NO_BUFFER);
  	}
  
 -	if (GSS_ERROR(major)) 
-+	if (GSS_ERROR(major) || intctx != NULL)
++	if (GSS_ERROR(major) || intctx != NULL) 
  		ssh_gssapi_delete_ctx(ctx);
  
  	return (!GSS_ERROR(major));
-diff -uNr ../openssh-4.7p1.orig/gss-serv-krb5.c ./gss-serv-krb5.c
---- ../openssh-4.7p1.orig/gss-serv-krb5.c	2006-08-31 22:38:36.000000000 -0700
-+++ ./gss-serv-krb5.c	2007-09-06 18:08:22.000000000 -0700
-@@ -168,11 +168,16 @@
+Index: gss-serv-krb5.c
+===================================================================
+RCS file: /cvs/openssh/gss-serv-krb5.c,v
+retrieving revision 1.17
+diff -u -r1.17 gss-serv-krb5.c
+--- gss-serv-krb5.c	1 Sep 2006 05:38:36 -0000	1.17
++++ gss-serv-krb5.c	4 Apr 2008 12:52:29 -0000
+@@ -120,6 +120,7 @@
+ 	krb5_principal princ;
+ 	OM_uint32 maj_status, min_status;
+ 	int len;
++	const char *new_ccname;
+ 
+ 	if (client->creds == NULL) {
+ 		debug("No credentials stored");
+@@ -168,11 +169,16 @@
  		return;
  	}
  
 -	client->store.filename = xstrdup(krb5_cc_get_name(krb_context, ccache));
-+	const char* new_ccname = krb5_cc_get_name(krb_context, ccache);
++	new_ccname = krb5_cc_get_name(krb_context, ccache);
 +
  	client->store.envvar = "KRB5CCNAME";
 -	len = strlen(client->store.filename) + 6;
@@ -527,15 +593,19 @@ diff -uNr ../openssh-4.7p1.orig/gss-serv-krb5.c ./gss-serv-krb5.c
  
  #ifdef USE_PAM
  	if (options.use_pam)
-diff -uNr ../openssh-4.7p1.orig/gss-serv.c ./gss-serv.c
---- ../openssh-4.7p1.orig/gss-serv.c	2007-06-12 06:40:39.000000000 -0700
-+++ ./gss-serv.c	2007-09-07 01:01:47.000000000 -0700
+Index: gss-serv.c
+===================================================================
+RCS file: /cvs/openssh/gss-serv.c,v
+retrieving revision 1.23
+diff -u -r1.23 gss-serv.c
+--- gss-serv.c	12 Jun 2007 13:40:39 -0000	1.23
++++ gss-serv.c	4 Apr 2008 12:52:29 -0000
 @@ -1,7 +1,7 @@
  /* $OpenBSD: gss-serv.c,v 1.21 2007/06/12 08:20:00 djm Exp $ */
  
  /*
 - * Copyright (c) 2001-2003 Simon Wilkinson. All rights reserved.
-+ * Copyright (c) 2001-2007 Simon Wilkinson. All rights reserved.
++ * Copyright (c) 2001-2008 Simon Wilkinson. All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted provided that the following conditions
@@ -552,7 +622,54 @@ diff -uNr ../openssh-4.7p1.orig/gss-serv.c ./gss-serv.c
  
  static ssh_gssapi_client gssapi_client =
      { GSS_C_EMPTY_BUFFER, GSS_C_EMPTY_BUFFER,
-@@ -113,6 +117,28 @@
+@@ -80,25 +84,32 @@
+ 	char lname[MAXHOSTNAMELEN];
+ 	gss_OID_set oidset;
+ 
+-	gss_create_empty_oid_set(&status, &oidset);
+-	gss_add_oid_set_member(&status, ctx->oid, &oidset);
++	if (options.gss_strict_acceptor) {
++		gss_create_empty_oid_set(&status, &oidset);
++		gss_add_oid_set_member(&status, ctx->oid, &oidset);
++
++		if (gethostname(lname, MAXHOSTNAMELEN)) {
++			gss_release_oid_set(&status, &oidset);
++			return (-1);
++		}
+ 
+-	if (gethostname(lname, MAXHOSTNAMELEN)) {
+-		gss_release_oid_set(&status, &oidset);
+-		return (-1);
+-	}
++		if (GSS_ERROR(ssh_gssapi_import_name(ctx, lname))) {
++			gss_release_oid_set(&status, &oidset);
++			return (ctx->major);
++		}
++
++		if ((ctx->major = gss_acquire_cred(&ctx->minor,
++		    ctx->name, 0, oidset, GSS_C_ACCEPT, &ctx->creds, 
++		    NULL, NULL)))
++			ssh_gssapi_error(ctx);
+ 
+-	if (GSS_ERROR(ssh_gssapi_import_name(ctx, lname))) {
+ 		gss_release_oid_set(&status, &oidset);
+ 		return (ctx->major);
++	} else {
++		ctx->name = GSS_C_NO_NAME;
++		ctx->creds = GSS_C_NO_CREDENTIAL;
+ 	}
+-
+-	if ((ctx->major = gss_acquire_cred(&ctx->minor,
+-	    ctx->name, 0, oidset, GSS_C_ACCEPT, &ctx->creds, NULL, NULL)))
+-		ssh_gssapi_error(ctx);
+-
+-	gss_release_oid_set(&status, &oidset);
+-	return (ctx->major);
++	return GSS_S_COMPLETE;
+ }
+ 
+ /* Privileged */
+@@ -113,6 +124,28 @@
  }
  
  /* Unprivileged */
@@ -581,18 +698,12 @@ diff -uNr ../openssh-4.7p1.orig/gss-serv.c ./gss-serv.c
  void
  ssh_gssapi_supported_oids(gss_OID_set *oidset)
  {
-@@ -137,7 +163,6 @@
- 	gss_release_oid_set(&min_status, &supported);
- }
- 
--
- /* Wrapper around accept_sec_context
-  * Requires that the context contains:
-  *    oid
-@@ -351,14 +376,4 @@
+@@ -349,16 +382,6 @@
+ 	else
+ 		debug("ssh_gssapi_userok: Unknown GSSAPI mechanism");
  	return (0);
- }
- 
+-}
+-
 -/* Privileged */
 -OM_uint32
 -ssh_gssapi_checkmic(Gssctxt *ctx, gss_buffer_t gssbuf, gss_buffer_t gssmic)
@@ -601,12 +712,16 @@ diff -uNr ../openssh-4.7p1.orig/gss-serv.c ./gss-serv.c
 -	    gssbuf, gssmic, NULL);
 -
 -	return (ctx->major);
--}
--
+ }
+ 
  #endif
-diff -uNr ../openssh-4.7p1.orig/kex.c ./kex.c
---- ../openssh-4.7p1.orig/kex.c	2007-06-05 01:30:18.000000000 -0700
-+++ ./kex.c	2007-09-06 18:15:50.000000000 -0700
+Index: kex.c
+===================================================================
+RCS file: /cvs/openssh/kex.c,v
+retrieving revision 1.86
+diff -u -r1.86 kex.c
+--- kex.c	5 Jun 2007 08:30:18 -0000	1.86
++++ kex.c	4 Apr 2008 12:52:29 -0000
 @@ -49,6 +49,10 @@
  #include "dispatch.h"
  #include "monitor.h"
@@ -618,10 +733,11 @@ diff -uNr ../openssh-4.7p1.orig/kex.c ./kex.c
  #define KEX_COOKIE_LEN	16
  
  #if OPENSSL_VERSION_NUMBER >= 0x00907000L
-@@ -327,6 +331,20 @@
+@@ -326,6 +330,20 @@
+ 	} else if (strcmp(k->name, KEX_DHGEX_SHA256) == 0) {
  		k->kex_type = KEX_DH_GEX_SHA256;
  		k->evp_md = evp_ssh_sha256();
- #endif
++#endif
 +#ifdef GSSAPI
 +	} else if (strncmp(k->name, KEX_GSS_GEX_SHA1_ID,
 +	    sizeof(KEX_GSS_GEX_SHA1_ID) - 1) == 0) {
@@ -635,13 +751,16 @@ diff -uNr ../openssh-4.7p1.orig/kex.c ./kex.c
 +	    sizeof(KEX_GSS_GRP14_SHA1_ID) - 1) == 0) {
 +		k->kex_type = KEX_GSS_GRP14_SHA1;
 +		k->evp_md = EVP_sha1();
-+#endif
+ #endif
  	} else
  		fatal("bad kex alg %s", k->name);
- }
-diff -uNr ../openssh-4.7p1.orig/kex.h ./kex.h
---- ../openssh-4.7p1.orig/kex.h	2007-06-10 21:01:42.000000000 -0700
-+++ ./kex.h	2007-09-06 18:16:53.000000000 -0700
+Index: kex.h
+===================================================================
+RCS file: /cvs/openssh/kex.h,v
+retrieving revision 1.49
+diff -u -r1.49 kex.h
+--- kex.h	11 Jun 2007 04:01:42 -0000	1.49
++++ kex.h	4 Apr 2008 12:52:29 -0000
 @@ -64,6 +64,9 @@
  	KEX_DH_GRP14_SHA1,
  	KEX_DH_GEX_SHA1,
@@ -664,21 +783,24 @@ diff -uNr ../openssh-4.7p1.orig/kex.h ./kex.h
  	char	*client_version_string;
  	char	*server_version_string;
  	int	(*verify_host_key)(Key *);
-@@ -141,6 +149,11 @@
+@@ -140,6 +148,11 @@
+ void	 kexdh_server(Kex *);
  void	 kexgex_client(Kex *);
  void	 kexgex_server(Kex *);
- 
++
 +#ifdef GSSAPI
 +void	kexgss_client(Kex *);
 +void	kexgss_server(Kex *);
 +#endif
-+
+ 
  void
  kex_dh_hash(char *, char *, char *, int, char *, int, u_char *, int,
-     BIGNUM *, BIGNUM *, BIGNUM *, u_char **, u_int *);
-diff -uNr ../openssh-4.7p1.orig/kexgssc.c ./kexgssc.c
---- ../openssh-4.7p1.orig/kexgssc.c	1969-12-31 16:00:00.000000000 -0800
-+++ ./kexgssc.c	2007-09-06 18:17:42.000000000 -0700
+Index: kexgssc.c
+===================================================================
+RCS file: kexgssc.c
+diff -N kexgssc.c
+--- /dev/null	1 Jan 1970 00:00:00 -0000
++++ kexgssc.c	4 Apr 2008 12:52:29 -0000
 @@ -0,0 +1,319 @@
 +/*
 + * Copyright (c) 2001-2006 Simon Wilkinson. All rights reserved.
@@ -999,9 +1121,12 @@ diff -uNr ../openssh-4.7p1.orig/kexgssc.c ./kexgssc.c
 +}
 +
 +#endif /* GSSAPI */
-diff -uNr ../openssh-4.7p1.orig/kexgsss.c ./kexgsss.c
---- ../openssh-4.7p1.orig/kexgsss.c	1969-12-31 16:00:00.000000000 -0800
-+++ ./kexgsss.c	2007-09-06 18:18:17.000000000 -0700
+Index: kexgsss.c
+===================================================================
+RCS file: kexgsss.c
+diff -N kexgsss.c
+--- /dev/null	1 Jan 1970 00:00:00 -0000
++++ kexgsss.c	4 Apr 2008 12:52:29 -0000
 @@ -0,0 +1,271 @@
 +/*
 + * Copyright (c) 2001-2006 Simon Wilkinson. All rights reserved.
@@ -1274,10 +1399,14 @@ diff -uNr ../openssh-4.7p1.orig/kexgsss.c ./kexgsss.c
 +	kex_finish(kex);
 +}
 +#endif /* GSSAPI */
-diff -uNr ../openssh-4.7p1.orig/key.c ./key.c
---- ../openssh-4.7p1.orig/key.c	2007-08-07 21:28:26.000000000 -0700
-+++ ./key.c	2007-09-06 18:18:44.000000000 -0700
-@@ -648,6 +648,8 @@
+Index: key.c
+===================================================================
+RCS file: /cvs/openssh/key.c,v
+retrieving revision 1.72
+diff -u -r1.72 key.c
+--- key.c	28 Feb 2008 08:22:04 -0000	1.72
++++ key.c	4 Apr 2008 12:52:29 -0000
+@@ -649,6 +649,8 @@
  		return KEY_RSA;
  	} else if (strcmp(name, "ssh-dss") == 0) {
  		return KEY_DSA;
@@ -1286,9 +1415,13 @@ diff -uNr ../openssh-4.7p1.orig/key.c ./key.c
  	}
  	debug2("key_type_from_name: unknown key type '%s'", name);
  	return KEY_UNSPEC;
-diff -uNr ../openssh-4.7p1.orig/key.h ./key.h
---- ../openssh-4.7p1.orig/key.h	2006-08-04 19:39:40.000000000 -0700
-+++ ./key.h	2007-09-06 18:19:05.000000000 -0700
+Index: key.h
+===================================================================
+RCS file: /cvs/openssh/key.h,v
+retrieving revision 1.28
+diff -u -r1.28 key.h
+--- key.h	5 Aug 2006 02:39:40 -0000	1.28
++++ key.h	4 Apr 2008 12:52:29 -0000
 @@ -34,6 +34,7 @@
  	KEY_RSA1,
  	KEY_RSA,
@@ -1297,9 +1430,13 @@ diff -uNr ../openssh-4.7p1.orig/key.h ./key.h
  	KEY_UNSPEC
  };
  enum fp_type {
-diff -uNr ../openssh-4.7p1.orig/monitor.c ./monitor.c
---- ../openssh-4.7p1.orig/monitor.c	2007-05-19 22:10:16.000000000 -0700
-+++ ./monitor.c	2007-09-06 18:22:01.000000000 -0700
+Index: monitor.c
+===================================================================
+RCS file: /cvs/openssh/monitor.c,v
+retrieving revision 1.127
+diff -u -r1.127 monitor.c
+--- monitor.c	11 Mar 2008 11:58:25 -0000	1.127
++++ monitor.c	4 Apr 2008 12:52:29 -0000
 @@ -163,6 +163,7 @@
  int mm_answer_gss_accept_ctx(int, Buffer *);
  int mm_answer_gss_userok(int, Buffer *);
@@ -1312,7 +1449,7 @@ diff -uNr ../openssh-4.7p1.orig/monitor.c ./monitor.c
      {MONITOR_REQ_GSSSTEP, MON_ISAUTH, mm_answer_gss_accept_ctx},
      {MONITOR_REQ_GSSUSEROK, MON_AUTH, mm_answer_gss_userok},
      {MONITOR_REQ_GSSCHECKMIC, MON_ISAUTH, mm_answer_gss_checkmic},
-+     {MONITOR_REQ_GSSSIGN, MON_ONCE, mm_answer_gss_sign},
++    {MONITOR_REQ_GSSSIGN, MON_ONCE, mm_answer_gss_sign},
  #endif
      {0, 0, NULL}
  };
@@ -1344,11 +1481,11 @@ diff -uNr ../openssh-4.7p1.orig/monitor.c ./monitor.c
 +#ifdef GSSAPI
 +		/* and for the GSSAPI key exchange */
 +		monitor_permit(mon_dispatch, MONITOR_REQ_GSSSETUP, 1);
-+#endif
++#endif		
  	} else {
  		mon_dispatch = mon_dispatch_postauth15;
  		monitor_permit(mon_dispatch, MONITOR_REQ_TERM, 1);
-@@ -1664,6 +1679,11 @@
+@@ -1670,6 +1685,11 @@
  	kex->kex[KEX_DH_GRP14_SHA1] = kexdh_server;
  	kex->kex[KEX_DH_GEX_SHA1] = kexgex_server;
  	kex->kex[KEX_DH_GEX_SHA256] = kexgex_server;
@@ -1360,7 +1497,7 @@ diff -uNr ../openssh-4.7p1.orig/monitor.c ./monitor.c
  	kex->server = 1;
  	kex->hostkey_type = buffer_get_int(m);
  	kex->kex_type = buffer_get_int(m);
-@@ -1905,6 +1925,7 @@
+@@ -1911,6 +1931,7 @@
  		monitor_permit(mon_dispatch, MONITOR_REQ_GSSSTEP, 0);
  		monitor_permit(mon_dispatch, MONITOR_REQ_GSSUSEROK, 1);
  		monitor_permit(mon_dispatch, MONITOR_REQ_GSSCHECKMIC, 1);
@@ -1368,7 +1505,7 @@ diff -uNr ../openssh-4.7p1.orig/monitor.c ./monitor.c
  	}
  	return (0);
  }
-@@ -1955,4 +1976,42 @@
+@@ -1961,4 +1982,42 @@
  	/* Monitor loop will terminate if authenticated */
  	return (authenticated);
  }
@@ -1411,9 +1548,13 @@ diff -uNr ../openssh-4.7p1.orig/monitor.c ./monitor.c
 +}
 +
  #endif /* GSSAPI */
-diff -uNr ../openssh-4.7p1.orig/monitor.h ./monitor.h
---- ../openssh-4.7p1.orig/monitor.h	2006-03-25 19:30:02.000000000 -0800
-+++ ./monitor.h	2007-09-06 18:22:29.000000000 -0700
+Index: monitor.h
+===================================================================
+RCS file: /cvs/openssh/monitor.h,v
+retrieving revision 1.21
+diff -u -r1.21 monitor.h
+--- monitor.h	26 Mar 2006 03:30:02 -0000	1.21
++++ monitor.h	4 Apr 2008 12:52:29 -0000
 @@ -53,6 +53,7 @@
  	MONITOR_REQ_GSSSTEP, MONITOR_ANS_GSSSTEP,
  	MONITOR_REQ_GSSUSEROK, MONITOR_ANS_GSSUSEROK,
@@ -1422,10 +1563,14 @@ diff -uNr ../openssh-4.7p1.orig/monitor.h ./monitor.h
  	MONITOR_REQ_PAM_START,
  	MONITOR_REQ_PAM_ACCOUNT, MONITOR_ANS_PAM_ACCOUNT,
  	MONITOR_REQ_PAM_INIT_CTX, MONITOR_ANS_PAM_INIT_CTX,
-diff -uNr ../openssh-4.7p1.orig/monitor_wrap.c ./monitor_wrap.c
---- ../openssh-4.7p1.orig/monitor_wrap.c	2007-06-10 21:01:42.000000000 -0700
-+++ ./monitor_wrap.c	2007-09-06 18:23:08.000000000 -0700
-@@ -1236,4 +1236,27 @@
+Index: monitor_wrap.c
+===================================================================
+RCS file: /cvs/openssh/monitor_wrap.c,v
+retrieving revision 1.76
+diff -u -r1.76 monitor_wrap.c
+--- monitor_wrap.c	2 Dec 2007 12:02:15 -0000	1.76
++++ monitor_wrap.c	4 Apr 2008 12:52:29 -0000
+@@ -1238,4 +1238,27 @@
  	debug3("%s: user %sauthenticated",__func__, authenticated ? "" : "not ");
  	return (authenticated);
  }
@@ -1453,9 +1598,13 @@ diff -uNr ../openssh-4.7p1.orig/monitor_wrap.c ./monitor_wrap.c
 +}
 +
  #endif /* GSSAPI */
-diff -uNr ../openssh-4.7p1.orig/monitor_wrap.h ./monitor_wrap.h
---- ../openssh-4.7p1.orig/monitor_wrap.h	2006-08-04 19:39:40.000000000 -0700
-+++ ./monitor_wrap.h	2007-09-06 18:23:42.000000000 -0700
+Index: monitor_wrap.h
+===================================================================
+RCS file: /cvs/openssh/monitor_wrap.h,v
+retrieving revision 1.27
+diff -u -r1.27 monitor_wrap.h
+--- monitor_wrap.h	5 Aug 2006 02:39:40 -0000	1.27
++++ monitor_wrap.h	4 Apr 2008 12:52:29 -0000
 @@ -59,6 +59,7 @@
     gss_buffer_desc *, gss_buffer_desc *, OM_uint32 *);
  int mm_ssh_gssapi_userok(char *user);
@@ -1464,9 +1613,13 @@ diff -uNr ../openssh-4.7p1.orig/monitor_wrap.h ./monitor_wrap.h
  #endif
  
  #ifdef USE_PAM
-diff -uNr ../openssh-4.7p1.orig/readconf.c ./readconf.c
---- ../openssh-4.7p1.orig/readconf.c	2007-03-21 02:46:03.000000000 -0700
-+++ ./readconf.c	2007-09-06 18:26:28.000000000 -0700
+Index: readconf.c
+===================================================================
+RCS file: /cvs/openssh/readconf.c,v
+retrieving revision 1.142
+diff -u -r1.142 readconf.c
+--- readconf.c	10 Feb 2008 11:25:52 -0000	1.142
++++ readconf.c	4 Apr 2008 12:52:29 -0000
 @@ -127,6 +127,8 @@
  	oClearAllForwardings, oNoHostAuthenticationForLocalhost,
  	oEnableSSHKeysign, oRekeyLimit, oVerifyHostKeyDNS, oConnectTimeout,
@@ -1491,7 +1644,7 @@ diff -uNr ../openssh-4.7p1.orig/readconf.c ./readconf.c
  #endif
  	{ "fallbacktorsh", oDeprecated },
  	{ "usersh", oDeprecated },
-@@ -441,10 +447,18 @@
+@@ -442,10 +448,18 @@
  		intptr = &options->gss_authentication;
  		goto parse_flag;
  
@@ -1533,22 +1686,30 @@ diff -uNr ../openssh-4.7p1.orig/readconf.c ./readconf.c
  	if (options->password_authentication == -1)
  		options->password_authentication = 1;
  	if (options->kbd_interactive_authentication == -1)
-diff -uNr ../openssh-4.7p1.orig/readconf.h ./readconf.h
---- ../openssh-4.7p1.orig/readconf.h	2006-08-04 19:39:40.000000000 -0700
-+++ ./readconf.h	2007-09-06 18:27:30.000000000 -0700
+Index: readconf.h
+===================================================================
+RCS file: /cvs/openssh/readconf.h,v
+retrieving revision 1.64
+diff -u -r1.64 readconf.h
+--- readconf.h	10 Feb 2008 11:25:52 -0000	1.64
++++ readconf.h	4 Apr 2008 12:52:29 -0000
 @@ -44,7 +44,9 @@
  	int     challenge_response_authentication;
  					/* Try S/Key or TIS, authentication. */
  	int     gss_authentication;	/* Try GSS authentication */
-+	int     gss_keyex;              /* Try GSS key exchange */
++	int	gss_keyex;              /* Try GSS key exchange */
  	int     gss_deleg_creds;	/* Delegate GSS credentials */
-+	int     gss_trust_dns;		/* Trust DNS for GSS canonicalization */
++	int	gss_trust_dns;		/* Trust DNS for GSS canonicalization */
  	int     password_authentication;	/* Try password
  						 * authentication. */
  	int     kbd_interactive_authentication; /* Try keyboard-interactive auth. */
-diff -uNr ../openssh-4.7p1.orig/servconf.c ./servconf.c
---- ../openssh-4.7p1.orig/servconf.c	2007-05-19 22:03:16.000000000 -0700
-+++ ./servconf.c	2007-09-06 18:34:21.000000000 -0700
+Index: servconf.c
+===================================================================
+RCS file: /cvs/openssh/servconf.c,v
+retrieving revision 1.168
+diff -u -r1.168 servconf.c
+--- servconf.c	10 Feb 2008 11:48:55 -0000	1.168
++++ servconf.c	4 Apr 2008 12:52:30 -0000
 @@ -90,7 +90,9 @@
  	options->kerberos_ticket_cleanup = -1;
  	options->kerberos_get_afs_token = -1;
@@ -1559,7 +1720,7 @@ diff -uNr ../openssh-4.7p1.orig/servconf.c ./servconf.c
  	options->password_authentication = -1;
  	options->kbd_interactive_authentication = -1;
  	options->challenge_response_authentication = -1;
-@@ -204,8 +206,12 @@
+@@ -205,8 +207,12 @@
  		options->kerberos_get_afs_token = 0;
  	if (options->gss_authentication == -1)
  		options->gss_authentication = 0;
@@ -1568,11 +1729,11 @@ diff -uNr ../openssh-4.7p1.orig/servconf.c ./servconf.c
  	if (options->gss_cleanup_creds == -1)
  		options->gss_cleanup_creds = 1;
 +	if (options->gss_strict_acceptor == -1)
-+		options->gss_strict_acceptor = 0;
++		options->gss_strict_acceptor = 1;
  	if (options->password_authentication == -1)
  		options->password_authentication = 1;
  	if (options->kbd_interactive_authentication == -1)
-@@ -290,7 +296,9 @@
+@@ -291,7 +297,9 @@
  	sBanner, sUseDNS, sHostbasedAuthentication,
  	sHostbasedUsesNameFromPacketOnly, sClientAliveInterval,
  	sClientAliveCountMax, sAuthorizedKeysFile, sAuthorizedKeysFile2,
@@ -1580,10 +1741,10 @@ diff -uNr ../openssh-4.7p1.orig/servconf.c ./servconf.c
 +	sGssAuthentication, sGssCleanupCreds, sGssStrictAcceptor,
 +	sGssKeyEx,
 +	sAcceptEnv, sPermitTunnel,
- 	sMatch, sPermitOpen, sForceCommand,
+ 	sMatch, sPermitOpen, sForceCommand, sChrootDirectory,
  	sUsePrivilegeSeparation,
  	sDeprecated, sUnsupported
-@@ -351,9 +359,13 @@
+@@ -352,9 +360,13 @@
  #ifdef GSSAPI
  	{ "gssapiauthentication", sGssAuthentication, SSHCFG_ALL },
  	{ "gssapicleanupcredentials", sGssCleanupCreds, SSHCFG_GLOBAL },
@@ -1597,7 +1758,7 @@ diff -uNr ../openssh-4.7p1.orig/servconf.c ./servconf.c
  #endif
  	{ "passwordauthentication", sPasswordAuthentication, SSHCFG_ALL },
  	{ "kbdinteractiveauthentication", sKbdInteractiveAuthentication, SSHCFG_ALL },
-@@ -871,10 +883,18 @@
+@@ -875,8 +887,16 @@
  		intptr = &options->gss_authentication;
  		goto parse_flag;
  
@@ -1607,19 +1768,21 @@ diff -uNr ../openssh-4.7p1.orig/servconf.c ./servconf.c
 +
  	case sGssCleanupCreds:
  		intptr = &options->gss_cleanup_creds;
- 		goto parse_flag;
- 
-+	case sGssStrictAcceptor:
-+		intptr = &options->gss_strict_acceptor;
 +		goto parse_flag;
 +
- 	case sPasswordAuthentication:
- 		intptr = &options->password_authentication;
++	case sGssStrictAcceptor:
++		intptr = &options->gss_strict_acceptor;
  		goto parse_flag;
-diff -uNr ../openssh-4.7p1.orig/servconf.h ./servconf.h
---- ../openssh-4.7p1.orig/servconf.h	2007-02-19 03:25:38.000000000 -0800
-+++ ./servconf.h	2007-09-06 18:34:50.000000000 -0700
-@@ -87,7 +87,9 @@
+ 
+ 	case sPasswordAuthentication:
+Index: servconf.h
+===================================================================
+RCS file: /cvs/openssh/servconf.h,v
+retrieving revision 1.74
+diff -u -r1.74 servconf.h
+--- servconf.h	7 Mar 2008 07:31:24 -0000	1.74
++++ servconf.h	4 Apr 2008 12:52:30 -0000
+@@ -90,7 +90,9 @@
  	int     kerberos_get_afs_token;		/* If true, try to get AFS token if
  						 * authenticated with Kerberos. */
  	int     gss_authentication;	/* If true, permit GSSAPI authentication */
@@ -1629,9 +1792,13 @@ diff -uNr ../openssh-4.7p1.orig/servconf.h ./servconf.h
  	int     password_authentication;	/* If true, permit password
  						 * authentication. */
  	int     kbd_interactive_authentication;	/* If true, permit */
-diff -uNr ../openssh-4.7p1.orig/ssh-gss.h ./ssh-gss.h
---- ../openssh-4.7p1.orig/ssh-gss.h	2007-06-12 06:40:39.000000000 -0700
-+++ ./ssh-gss.h	2007-09-06 18:36:09.000000000 -0700
+Index: ssh-gss.h
+===================================================================
+RCS file: /cvs/openssh/ssh-gss.h,v
+retrieving revision 1.12
+diff -u -r1.12 ssh-gss.h
+--- ssh-gss.h	12 Jun 2007 13:40:39 -0000	1.12
++++ ssh-gss.h	4 Apr 2008 12:52:30 -0000
 @@ -60,6 +60,17 @@
  
  #define SSH_GSS_OIDTYPE 0x06
@@ -1679,9 +1846,13 @@ diff -uNr ../openssh-4.7p1.orig/ssh-gss.h ./ssh-gss.h
  #endif /* GSSAPI */
  
  #endif /* _SSH_GSS_H */
-diff -uNr ../openssh-4.7p1.orig/ssh_config ./ssh_config
---- ../openssh-4.7p1.orig/ssh_config	2007-06-10 21:04:42.000000000 -0700
-+++ ./ssh_config	2007-09-06 18:36:39.000000000 -0700
+Index: ssh_config
+===================================================================
+RCS file: /cvs/openssh/ssh_config,v
+retrieving revision 1.25
+diff -u -r1.25 ssh_config
+--- ssh_config	11 Jun 2007 04:04:42 -0000	1.25
++++ ssh_config	4 Apr 2008 12:52:30 -0000
 @@ -26,6 +26,8 @@
  #   HostbasedAuthentication no
  #   GSSAPIAuthentication no
@@ -1691,9 +1862,13 @@ diff -uNr ../openssh-4.7p1.orig/ssh_config ./ssh_config
  #   BatchMode no
  #   CheckHostIP yes
  #   AddressFamily any
-diff -uNr ../openssh-4.7p1.orig/ssh_config.5 ./ssh_config.5
---- ../openssh-4.7p1.orig/ssh_config.5	2007-08-15 05:20:22.000000000 -0700
-+++ ./ssh_config.5	2007-09-06 18:37:53.000000000 -0700
+Index: ssh_config.5
+===================================================================
+RCS file: /cvs/openssh/ssh_config.5,v
+retrieving revision 1.105
+diff -u -r1.105 ssh_config.5
+--- ssh_config.5	2 Dec 2007 12:09:30 -0000	1.105
++++ ssh_config.5	4 Apr 2008 12:52:30 -0000
 @@ -477,11 +477,28 @@
  The default is
  .Dq no .
@@ -1723,9 +1898,13 @@ diff -uNr ../openssh-4.7p1.orig/ssh_config.5 ./ssh_config.5
  .It Cm HashKnownHosts
  Indicates that
  .Xr ssh 1
-diff -uNr ../openssh-4.7p1.orig/sshconnect2.c ./sshconnect2.c
---- ../openssh-4.7p1.orig/sshconnect2.c	2007-05-19 22:11:33.000000000 -0700
-+++ ./sshconnect2.c	2007-09-06 18:41:43.000000000 -0700
+Index: sshconnect2.c
+===================================================================
+RCS file: /cvs/openssh/sshconnect2.c,v
+retrieving revision 1.156
+diff -u -r1.156 sshconnect2.c
+--- sshconnect2.c	10 Feb 2008 11:25:53 -0000	1.156
++++ sshconnect2.c	4 Apr 2008 12:52:30 -0000
 @@ -99,9 +99,34 @@
  {
  	Kex *kex;
@@ -1776,7 +1955,7 @@ diff -uNr ../openssh-4.7p1.orig/sshconnect2.c ./sshconnect2.c
 +#endif
 +
  	if (options.rekey_limit)
- 		packet_set_rekey_limit(options.rekey_limit);
+ 		packet_set_rekey_limit((u_int32_t)options.rekey_limit);
  
 @@ -138,10 +173,21 @@
  	kex->kex[KEX_DH_GRP14_SHA1] = kexdh_client;
@@ -1901,10 +2080,14 @@ diff -uNr ../openssh-4.7p1.orig/sshconnect2.c ./sshconnect2.c
  #endif /* GSSAPI */
  
  int
-diff -uNr ../openssh-4.7p1.orig/sshd.c ./sshd.c
---- ../openssh-4.7p1.orig/sshd.c	2007-06-05 01:22:32.000000000 -0700
-+++ ./sshd.c	2007-09-07 00:07:43.000000000 -0700
-@@ -117,6 +117,10 @@
+Index: sshd.c
+===================================================================
+RCS file: /cvs/openssh/sshd.c,v
+retrieving revision 1.372
+diff -u -r1.372 sshd.c
+--- sshd.c	11 Mar 2008 11:58:25 -0000	1.372
++++ sshd.c	4 Apr 2008 12:52:30 -0000
+@@ -119,6 +119,10 @@
  #include "monitor_fdpass.h"
  #include "version.h"
  
@@ -1915,7 +2098,7 @@ diff -uNr ../openssh-4.7p1.orig/sshd.c ./sshd.c
  #ifdef LIBWRAP
  #include <tcpd.h>
  #include <syslog.h>
-@@ -1481,10 +1485,13 @@
+@@ -1501,10 +1505,13 @@
  		logit("Disabling protocol version 1. Could not load host key");
  		options.protocol &= ~SSH_PROTO_1;
  	}
@@ -1929,7 +2112,7 @@ diff -uNr ../openssh-4.7p1.orig/sshd.c ./sshd.c
  	if (!(options.protocol & (SSH_PROTO_1|SSH_PROTO_2))) {
  		logit("sshd: no hostkeys available -- exiting.");
  		exit(1);
-@@ -1759,6 +1766,60 @@
+@@ -1777,6 +1784,60 @@
  	/* Log the connection. */
  	verbose("Connection from %.500s port %d", remote_ip, remote_port);
  
@@ -1990,7 +2173,7 @@ diff -uNr ../openssh-4.7p1.orig/sshd.c ./sshd.c
  	/*
  	 * We don't want to listen forever unless the other side
  	 * successfully authenticates itself.  So we set up an alarm which is
-@@ -2117,12 +2178,59 @@
+@@ -2153,12 +2214,59 @@
  
  	myproposal[PROPOSAL_SERVER_HOST_KEY_ALGS] = list_hostkey_types();
  
@@ -2050,9 +2233,13 @@ diff -uNr ../openssh-4.7p1.orig/sshd.c ./sshd.c
  	kex->server = 1;
  	kex->client_version_string=client_version_string;
  	kex->server_version_string=server_version_string;
-diff -uNr ../openssh-4.7p1.orig/sshd_config ./sshd_config
---- ../openssh-4.7p1.orig/sshd_config	2007-03-21 02:42:25.000000000 -0700
-+++ ./sshd_config	2007-09-06 18:44:30.000000000 -0700
+Index: sshd_config
+===================================================================
+RCS file: /cvs/openssh/sshd_config,v
+retrieving revision 1.79
+diff -u -r1.79 sshd_config
+--- sshd_config	10 Feb 2008 11:40:12 -0000	1.79
++++ sshd_config	4 Apr 2008 12:52:30 -0000
 @@ -72,6 +72,8 @@
  # GSSAPI options
  #GSSAPIAuthentication no
@@ -2062,10 +2249,14 @@ diff -uNr ../openssh-4.7p1.orig/sshd_config ./sshd_config
  
  # Set this to 'yes' to enable PAM authentication, account processing, 
  # and session processing. If this is enabled, PAM authentication will 
-diff -uNr ../openssh-4.7p1.orig/sshd_config.5 ./sshd_config.5
---- ../openssh-4.7p1.orig/sshd_config.5	2007-06-10 21:07:13.000000000 -0700
-+++ ./sshd_config.5	2007-09-06 18:45:48.000000000 -0700
-@@ -318,12 +318,35 @@
+Index: sshd_config.5
+===================================================================
+RCS file: /cvs/openssh/sshd_config.5,v
+retrieving revision 1.90
+diff -u -r1.90 sshd_config.5
+--- sshd_config.5	27 Mar 2008 00:02:02 -0000	1.90
++++ sshd_config.5	4 Apr 2008 12:52:30 -0000
+@@ -365,12 +365,35 @@
  The default is
  .Dq no .
  Note that this option applies to protocol version 2 only.
