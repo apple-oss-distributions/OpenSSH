@@ -1,4 +1,4 @@
-/* $OpenBSD: readconf.c,v 1.162 2007/03/20 03:56:12 tedu Exp $ */
+/* $OpenBSD: readconf.c,v 1.176 2009/02/12 03:00:56 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -132,6 +132,10 @@ typedef enum {
 	oServerAliveInterval, oServerAliveCountMax, oIdentitiesOnly,
 	oSendEnv, oControlPath, oControlMaster, oHashKnownHosts,
 	oTunnel, oTunnelDevice, oLocalCommand, oPermitLocalCommand,
+	oVisualHostKey, oZeroKnowledgePasswordAuthentication,
+#ifdef __APPLE_KEYCHAIN__
+	oAskPassGUI,
+#endif
 	oDeprecated, oUnsupported
 } OpCodes;
 
@@ -177,7 +181,7 @@ static struct {
 	{ "fallbacktorsh", oDeprecated },
 	{ "usersh", oDeprecated },
 	{ "identityfile", oIdentityFile },
-	{ "identityfile2", oIdentityFile },			/* alias */
+	{ "identityfile2", oIdentityFile },			/* obsolete */
 	{ "identitiesonly", oIdentitiesOnly },
 	{ "hostname", oHostName },
 	{ "hostkeyalias", oHostKeyAlias },
@@ -193,8 +197,8 @@ static struct {
 	{ "host", oHost },
 	{ "escapechar", oEscapeChar },
 	{ "globalknownhostsfile", oGlobalKnownHostsFile },
-	{ "userknownhostsfile", oUserKnownHostsFile },		/* obsolete */
-	{ "globalknownhostsfile2", oGlobalKnownHostsFile2 },
+	{ "globalknownhostsfile2", oGlobalKnownHostsFile2 },	/* obsolete */
+	{ "userknownhostsfile", oUserKnownHostsFile },
 	{ "userknownhostsfile2", oUserKnownHostsFile2 },	/* obsolete */
 	{ "connectionattempts", oConnectionAttempts },
 	{ "batchmode", oBatchMode },
@@ -232,6 +236,16 @@ static struct {
 	{ "tunneldevice", oTunnelDevice },
 	{ "localcommand", oLocalCommand },
 	{ "permitlocalcommand", oPermitLocalCommand },
+	{ "visualhostkey", oVisualHostKey },
+#ifdef JPAKE
+	{ "zeroknowledgepasswordauthentication",
+	    oZeroKnowledgePasswordAuthentication },
+#else
+	{ "zeroknowledgepasswordauthentication", oUnsupported },
+#endif
+#ifdef __APPLE_KEYCHAIN__
+	{ "askpassgui", oAskPassGUI },
+#endif
 	{ NULL, oBadOption }
 };
 
@@ -253,10 +267,9 @@ add_local_forward(Options *options, const Forward *newfwd)
 		fatal("Too many local forwards (max %d).", SSH_MAX_FORWARDS_PER_DIRECTION);
 	fwd = &options->local_forwards[options->num_local_forwards++];
 
-	fwd->listen_host = (newfwd->listen_host == NULL) ?
-	    NULL : xstrdup(newfwd->listen_host);
+	fwd->listen_host = newfwd->listen_host;
 	fwd->listen_port = newfwd->listen_port;
-	fwd->connect_host = xstrdup(newfwd->connect_host);
+	fwd->connect_host = newfwd->connect_host;
 	fwd->connect_port = newfwd->connect_port;
 }
 
@@ -274,10 +287,9 @@ add_remote_forward(Options *options, const Forward *newfwd)
 		    SSH_MAX_FORWARDS_PER_DIRECTION);
 	fwd = &options->remote_forwards[options->num_remote_forwards++];
 
-	fwd->listen_host = (newfwd->listen_host == NULL) ?
-	    NULL : xstrdup(newfwd->listen_host);
+	fwd->listen_host = newfwd->listen_host;
 	fwd->listen_port = newfwd->listen_port;
-	fwd->connect_host = xstrdup(newfwd->connect_host);
+	fwd->connect_host = newfwd->connect_host;
 	fwd->connect_port = newfwd->connect_port;
 }
 
@@ -332,6 +344,7 @@ process_config_line(Options *options, const char *host,
 {
 	char *s, **charptr, *endofnumber, *keyword, *arg, *arg2, fwdarg[256];
 	int opcode, *intptr, value, value2, scale;
+	LogLevel *log_level_ptr;
 	long long orig, val64;
 	size_t len;
 	Forward fwd;
@@ -413,6 +426,10 @@ parse_flag:
 
 	case oPasswordAuthentication:
 		intptr = &options->password_authentication;
+		goto parse_flag;
+
+	case oZeroKnowledgePasswordAuthentication:
+		intptr = &options->zero_knowledge_password_authentication;
 		goto parse_flag;
 
 	case oKbdInteractiveAuthentication:
@@ -512,7 +529,6 @@ parse_yesnoask:
 		goto parse_int;
 
 	case oRekeyLimit:
-		intptr = &options->rekey_limit;
 		arg = strdelim(&s);
 		if (!arg || *arg == '\0')
 			fatal("%.200s line %d: Missing argument.", filename, linenum);
@@ -540,14 +556,14 @@ parse_yesnoask:
 		}
 		val64 *= scale;
 		/* detect integer wrap and too-large limits */
-		if ((val64 / scale) != orig || val64 > INT_MAX)
+		if ((val64 / scale) != orig || val64 > UINT_MAX)
 			fatal("%.200s line %d: RekeyLimit too large",
 			    filename, linenum);
 		if (val64 < 16)
 			fatal("%.200s line %d: RekeyLimit too small",
 			    filename, linenum);
-		if (*activep && *intptr == -1)
-			*intptr = (int)val64;
+		if (*activep && options->rekey_limit == -1)
+			options->rekey_limit = (u_int32_t)val64;
 		break;
 
 	case oIdentityFile:
@@ -706,66 +722,50 @@ parse_int:
 		break;
 
 	case oLogLevel:
-		intptr = (int *) &options->log_level;
+		log_level_ptr = &options->log_level;
 		arg = strdelim(&s);
 		value = log_level_number(arg);
 		if (value == SYSLOG_LEVEL_NOT_SET)
 			fatal("%.200s line %d: unsupported log level '%s'",
 			    filename, linenum, arg ? arg : "<NONE>");
-		if (*activep && (LogLevel) *intptr == SYSLOG_LEVEL_NOT_SET)
-			*intptr = (LogLevel) value;
+		if (*activep && *log_level_ptr == SYSLOG_LEVEL_NOT_SET)
+			*log_level_ptr = (LogLevel) value;
 		break;
 
 	case oLocalForward:
 	case oRemoteForward:
+	case oDynamicForward:
 		arg = strdelim(&s);
 		if (arg == NULL || *arg == '\0')
 			fatal("%.200s line %d: Missing port argument.",
 			    filename, linenum);
-		arg2 = strdelim(&s);
-		if (arg2 == NULL || *arg2 == '\0')
-			fatal("%.200s line %d: Missing target argument.",
-			    filename, linenum);
 
-		/* construct a string for parse_forward */
-		snprintf(fwdarg, sizeof(fwdarg), "%s:%s", arg, arg2);
+		if (opcode == oLocalForward ||
+		    opcode == oRemoteForward) {
+			arg2 = strdelim(&s);
+			if (arg2 == NULL || *arg2 == '\0')
+				fatal("%.200s line %d: Missing target argument.",
+				    filename, linenum);
 
-		if (parse_forward(&fwd, fwdarg) == 0)
+			/* construct a string for parse_forward */
+			snprintf(fwdarg, sizeof(fwdarg), "%s:%s", arg, arg2);
+		} else if (opcode == oDynamicForward) {
+			strlcpy(fwdarg, arg, sizeof(fwdarg));
+		}
+
+		if (parse_forward(&fwd, fwdarg,
+		    opcode == oDynamicForward ? 1 : 0,
+		    opcode == oRemoteForward ? 1 : 0) == 0)
 			fatal("%.200s line %d: Bad forwarding specification.",
 			    filename, linenum);
 
 		if (*activep) {
-			if (opcode == oLocalForward)
+			if (opcode == oLocalForward ||
+			    opcode == oDynamicForward)
 				add_local_forward(options, &fwd);
 			else if (opcode == oRemoteForward)
 				add_remote_forward(options, &fwd);
 		}
-		break;
-
-	case oDynamicForward:
-		arg = strdelim(&s);
-		if (!arg || *arg == '\0')
-			fatal("%.200s line %d: Missing port argument.",
-			    filename, linenum);
-		memset(&fwd, '\0', sizeof(fwd));
-		fwd.connect_host = "socks";
-		fwd.listen_host = hpdelim(&arg);
-		if (fwd.listen_host == NULL ||
-		    strlen(fwd.listen_host) >= NI_MAXHOST)
-			fatal("%.200s line %d: Bad forwarding specification.",
-			    filename, linenum);
-		if (arg) {
-			fwd.listen_port = a2port(arg);
-			fwd.listen_host = cleanhostname(fwd.listen_host);
-		} else {
-			fwd.listen_port = a2port(fwd.listen_host);
-			fwd.listen_host = NULL;
-		}
-		if (fwd.listen_port == 0)
-			fatal("%.200s line %d: Badly formatted port number.",
-			    filename, linenum);
-		if (*activep)
-			add_local_forward(options, &fwd);
 		break;
 
 	case oClearAllForwardings:
@@ -929,6 +929,16 @@ parse_int:
 		intptr = &options->permit_local_command;
 		goto parse_flag;
 
+	case oVisualHostKey:
+		intptr = &options->visual_host_key;
+		goto parse_flag;
+
+#ifdef __APPLE_KEYCHAIN__
+	case oAskPassGUI:
+		intptr = &options->ask_pass_gui;
+		goto parse_flag;
+#endif
+
 	case oDeprecated:
 		debug("%s line %d: Deprecated option \"%s\"",
 		    filename, linenum, keyword);
@@ -967,7 +977,6 @@ read_config_file(const char *filename, const char *host, Options *options,
 	int active, linenum;
 	int bad_options = 0;
 
-	/* Open the file. */
 	if ((f = fopen(filename, "r")) == NULL)
 		return 0;
 
@@ -1081,6 +1090,11 @@ initialize_options(Options * options)
 	options->tun_remote = -1;
 	options->local_command = NULL;
 	options->permit_local_command = -1;
+	options->visual_host_key = -1;
+	options->zero_knowledge_password_authentication = -1;
+#ifdef __APPLE_KEYCHAIN__
+	options->ask_pass_gui = -1;
+#endif
 }
 
 /*
@@ -1113,17 +1127,10 @@ fill_default_options(Options * options)
 		options->pubkey_authentication = 1;
 	if (options->challenge_response_authentication == -1)
 		options->challenge_response_authentication = 1;
-#ifdef __APPLE_GSSAPI_ENABLE__
-	if (options->gss_authentication == -1)
-		options->gss_authentication = 1;
-	if (options->gss_keyex == -1)
-		options->gss_keyex = 1;
-#else
 	if (options->gss_authentication == -1)
 		options->gss_authentication = 0;
 	if (options->gss_keyex == -1)
 		options->gss_keyex = 0;
-#endif
 	if (options->gss_deleg_creds == -1)
 		options->gss_deleg_creds = 0;
 	if (options->gss_trust_dns == -1)
@@ -1226,6 +1233,14 @@ fill_default_options(Options * options)
 		options->tun_remote = SSH_TUNID_ANY;
 	if (options->permit_local_command == -1)
 		options->permit_local_command = 0;
+	if (options->visual_host_key == -1)
+		options->visual_host_key = 0;
+	if (options->zero_knowledge_password_authentication == -1)
+		options->zero_knowledge_password_authentication = 0;
+#ifdef __APPLE_KEYCHAIN__
+	if (options->ask_pass_gui == -1)
+		options->ask_pass_gui = 1;
+#endif
 	/* options->local_command should not be set by default */
 	/* options->proxy_command should not be set by default */
 	/* options->user will be set in the main program if appropriate */
@@ -1237,11 +1252,14 @@ fill_default_options(Options * options)
 /*
  * parse_forward
  * parses a string containing a port forwarding specification of the form:
+ *   dynamicfwd == 0
  *	[listenhost:]listenport:connecthost:connectport
+ *   dynamicfwd == 1
+ *	[listenhost:]listenport
  * returns number of arguments parsed or zero on error
  */
 int
-parse_forward(Forward *fwd, const char *fwdspec)
+parse_forward(Forward *fwd, const char *fwdspec, int dynamicfwd, int remotefwd)
 {
 	int i;
 	char *p, *cp, *fwdarg[4];
@@ -1258,11 +1276,23 @@ parse_forward(Forward *fwd, const char *fwdspec)
 		if ((fwdarg[i] = hpdelim(&cp)) == NULL)
 			break;
 
-	/* Check for trailing garbage in 4-arg case*/
+	/* Check for trailing garbage */
 	if (cp != NULL)
 		i = 0;	/* failure */
 
 	switch (i) {
+	case 1:
+		fwd->listen_host = NULL;
+		fwd->listen_port = a2port(fwdarg[0]);
+		fwd->connect_host = xstrdup("socks");
+		break;
+
+	case 2:
+		fwd->listen_host = xstrdup(cleanhostname(fwdarg[0]));
+		fwd->listen_port = a2port(fwdarg[1]);
+		fwd->connect_host = xstrdup("socks");
+		break;
+
 	case 3:
 		fwd->listen_host = NULL;
 		fwd->listen_port = a2port(fwdarg[0]);
@@ -1282,19 +1312,37 @@ parse_forward(Forward *fwd, const char *fwdspec)
 
 	xfree(p);
 
-	if (fwd->listen_port == 0 && fwd->connect_port == 0)
+	if (dynamicfwd) {
+		if (!(i == 1 || i == 2))
+			goto fail_free;
+	} else {
+		if (!(i == 3 || i == 4))
+			goto fail_free;
+		if (fwd->connect_port <= 0)
+			goto fail_free;
+	}
+
+	if (fwd->listen_port < 0 || (!remotefwd && fwd->listen_port == 0))
 		goto fail_free;
 
 	if (fwd->connect_host != NULL &&
 	    strlen(fwd->connect_host) >= NI_MAXHOST)
 		goto fail_free;
+	if (fwd->listen_host != NULL &&
+	    strlen(fwd->listen_host) >= NI_MAXHOST)
+		goto fail_free;
+
 
 	return (i);
 
  fail_free:
-	if (fwd->connect_host != NULL)
+	if (fwd->connect_host != NULL) {
 		xfree(fwd->connect_host);
-	if (fwd->listen_host != NULL)
+		fwd->connect_host = NULL;
+	}
+	if (fwd->listen_host != NULL) {
 		xfree(fwd->listen_host);
+		fwd->listen_host = NULL;
+	}
 	return (0);
 }

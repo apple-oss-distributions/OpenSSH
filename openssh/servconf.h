@@ -1,4 +1,4 @@
-/* $OpenBSD: servconf.h,v 1.80 2007/02/19 10:45:58 dtucker Exp $ */
+/* $OpenBSD: servconf.h,v 1.87 2009/01/22 10:02:34 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -35,11 +35,15 @@
 #define	PERMIT_YES		3
 
 #define DEFAULT_AUTH_FAIL_MAX	6	/* Default for MaxAuthTries */
+#define DEFAULT_SESSIONS_MAX	10	/* Default for MaxSessions */
+
+/* Magic name for internal sftp-server */
+#define INTERNAL_SFTP_NAME	"internal-sftp"
 
 typedef struct {
-	u_int num_ports;
-	u_int ports_from_cmdline;
-	u_short ports[MAX_PORTS];	/* Port number to listen on. */
+	u_int	num_ports;
+	u_int	ports_from_cmdline;
+	int	ports[MAX_PORTS];	/* Port number to listen on. */
 	char   *listen_addr;		/* Address on which the server listens. */
 	struct addrinfo *listen_addrs;	/* Addresses on which the server listens. */
 	int     address_family;		/* Address family used by the server. */
@@ -94,12 +98,15 @@ typedef struct {
 						 * authentication. */
 	int     kbd_interactive_authentication;	/* If true, permit */
 	int     challenge_response_authentication;
+	int     zero_knowledge_password_authentication;
+					/* If true, permit jpake auth */
 	int     permit_empty_passwd;	/* If false, do not permit empty
 					 * passwords. */
 	int     permit_user_env;	/* If true, read ~/.ssh/environment */
 	int     use_login;	/* If true, login(1) is used */
 	int     compression;	/* If true, compression is allowed */
 	int	allow_tcp_forwarding;
+	int	allow_agent_forwarding;
 	u_int num_allow_users;
 	char   *allow_users[MAX_ALLOW_USERS];
 	u_int num_deny_users;
@@ -121,6 +128,7 @@ typedef struct {
 	int	max_startups_rate;
 	int	max_startups;
 	int	max_authtries;
+	int	max_sessions;
 	char   *banner;			/* SSH-2 banner message */
 	int	use_dns;
 	int	client_alive_interval;	/*
@@ -144,6 +152,8 @@ typedef struct {
 	int	permit_tun;
 
 	int	num_permitted_opens;
+
+	char   *chroot_directory;
 }       ServerOptions;
 
 void	 initialize_server_options(ServerOptions *);
@@ -156,5 +166,6 @@ void	 parse_server_config(ServerOptions *, const char *, Buffer *,
 void	 parse_server_match_config(ServerOptions *, const char *, const char *,
 	     const char *);
 void	 copy_set_server_options(ServerOptions *, ServerOptions *, int);
+void	 dump_config(ServerOptions *);
 
 #endif				/* SERVCONF_H */

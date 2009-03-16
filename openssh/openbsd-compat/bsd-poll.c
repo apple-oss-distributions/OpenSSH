@@ -1,4 +1,4 @@
-/* $Id: bsd-poll.c,v 1.1 2007/06/25 12:15:13 dtucker Exp $ */
+/* $Id: bsd-poll.c,v 1.4 2008/08/29 21:32:38 dtucker Exp $ */
 
 /*
  * Copyright (c) 2004, 2005, 2007 Darren Tucker (dtucker at zip com au).
@@ -17,12 +17,13 @@
  */
 
 #include "includes.h"
-#if !defined(HAVE_POLL) && defined(HAVE_SELECT)
+#if !defined(HAVE_POLL)
 
 #ifdef HAVE_SYS_SELECT_H
 # include <sys/select.h>
 #endif
 
+#include <stdlib.h>
 #include <errno.h>
 #include "bsd-poll.h"
 
@@ -45,11 +46,12 @@ poll(struct pollfd *fds, nfds_t nfds, int timeout)
 	struct timeval tv, *tvp = NULL;
 
 	for (i = 0; i < nfds; i++) {
+		fd = fds[i].fd;
 		if (fd >= FD_SETSIZE) {
 			errno = EINVAL;
 			return -1;
 		}
-		maxfd = MAX(maxfd, fds[i].fd);
+		maxfd = MAX(maxfd, fd);
 	}
 
 	nmemb = howmany(maxfd + 1 , NFDBITS);

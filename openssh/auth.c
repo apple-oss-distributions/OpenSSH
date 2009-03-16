@@ -1,4 +1,4 @@
-/* $OpenBSD: auth.c,v 1.75 2006/08/03 03:34:41 deraadt Exp $ */
+/* $OpenBSD: auth.c,v 1.80 2008/11/04 07:58:09 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -32,6 +32,7 @@
 #include <netinet/in.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #ifdef HAVE_PATHS_H
 # include <paths.h>
 #endif
@@ -45,14 +46,10 @@
 #ifdef HAVE_LIBGEN_H
 #include <libgen.h>
 #endif
-
-#ifdef __APPLE_SACL__
-#include <membershipPriv.h>
-#endif
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "xmalloc.h"
 #include "match.h"
@@ -73,6 +70,12 @@
 #include "ssh-gss.h"
 #endif
 #include "monitor_wrap.h"
+
+#ifdef __APPLE_SACL__
+/* Our membershipPriv.h is not yet API, so I will define the prototypes that I need here. */
+int mbr_user_name_to_uuid(const char *name, uuid_t uu);
+int mbr_check_service_membership(const uuid_t user, const char *servicename, int *ismember);
+#endif
 
 /* import */
 extern ServerOptions options;
@@ -118,6 +121,7 @@ allowed_user(struct passwd * pw)
 #endif /* USE_SHADOW */
 
 	/* grab passwd field for locked account check */
+	passwd = pw->pw_passwd;
 #ifdef USE_SHADOW
 	if (spw != NULL)
 #ifdef USE_LIBIAF
@@ -125,8 +129,6 @@ allowed_user(struct passwd * pw)
 #else
 		passwd = spw->sp_pwdp;
 #endif /* USE_LIBIAF */
-#else
-	passwd = pw->pw_passwd;
 #endif
 
 	/* check for locked account */
@@ -207,7 +209,7 @@ allowed_user(struct passwd * pw)
 	}
 	if (options.num_deny_groups > 0 || options.num_allow_groups > 0) {
 		/* Get the user's group access list (primary and supplementary) */
-		if (ga_init(pw->pw_name, pw->pw_gid) == 0) {
+		if (ga_init(pw) == 0) {
 			logit("User %.100s from %.100s not allowed because "
 			    "not in any group", pw->pw_name, hostname);
 			return 0;
@@ -455,7 +457,7 @@ check_key_in_hostfiles(struct passwd *pw, Key *key, const char *host,
  *
  * Returns 0 on success and -1 on failure
  */
-int
+static int
 secure_filename(FILE *f, const char *file, struct passwd *pw,
     char *err, size_t errlen)
 {
@@ -513,6 +515,46 @@ secure_filename(FILE *f, const char *file, struct passwd *pw,
 			break;
 	}
 	return 0;
+}
+
+FILE *
+auth_openkeyfile(const char *file, struct passwd *pw, int strict_modes)
+{
+	char line[1024];
+	struct stat st;
+	int fd;
+	FILE *f;
+
+	/*
+	 * Open the file containing the authorized keys
+	 * Fail quietly if file does not exist
+	 */
+	if ((fd = open(file, O_RDONLY|O_NONBLOCK)) == -1)
+		return NULL;
+
+	if (fstat(fd, &st) < 0) {
+		close(fd);
+		return NULL;
+	}
+	if (!S_ISREG(st.st_mode)) {
+		logit("User %s authorized keys %s is not a regular file",
+		    pw->pw_name, file);
+		close(fd);
+		return NULL;
+	}
+	unset_nonblock(fd);
+	if ((f = fdopen(fd, "r")) == NULL) {
+		close(fd);
+		return NULL;
+	}
+	if (options.strict_modes &&
+	    secure_filename(f, file, pw, line, sizeof(line)) != 0) {
+		fclose(f);
+		logit("Authentication refused: %s", line);
+		return NULL;
+	}
+
+	return f;
 }
 
 struct passwd *

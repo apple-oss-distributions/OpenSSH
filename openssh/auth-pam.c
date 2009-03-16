@@ -598,15 +598,17 @@ static struct pam_conv store_conv = { sshpam_store_conv, NULL };
 void
 sshpam_cleanup(void)
 {
-	debug("PAM: cleanup");
-	if (sshpam_handle == NULL)
+	if (sshpam_handle == NULL || (use_privsep && !mm_is_monitor()))
 		return;
+	debug("PAM: cleanup");
 	pam_set_item(sshpam_handle, PAM_CONV, (const void *)&null_conv);
 	if (sshpam_cred_established) {
+		debug("PAM: deleting credentials");
 		pam_setcred(sshpam_handle, PAM_DELETE_CRED);
 		sshpam_cred_established = 0;
 	}
 	if (sshpam_session_open) {
+		debug("PAM: closing session");
 		pam_close_session(sshpam_handle, PAM_SILENT);
 		sshpam_session_open = 0;
 	}
@@ -791,10 +793,11 @@ sshpam_query(void *ctx, char **name, char **info,
 				xfree(msg);
 				return (0);
 			}
-			error("PAM: %s for %s%.100s from %.100s", msg,
+			error("PAM: %s for %s%.100s from %.100s via %s", msg,
 			    sshpam_authctxt->valid ? "" : "illegal user ",
 			    sshpam_authctxt->user,
-			    get_remote_name_or_ip(utmp_len, options.use_dns));
+			    get_remote_name_or_ip(utmp_len, options.use_dns),
+			    get_local_ipaddr(packet_get_connection_in()));
 			/* FALLTHROUGH */
 		default:
 			*num = 0;

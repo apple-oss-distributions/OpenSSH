@@ -17,11 +17,11 @@
 #old cvs stuff.  please update before use.  may be deprecated.
 %define use_stable	1
 %if %{use_stable}
-  %define version 	4.7p1
+  %define version 	5.2p1
   %define cvs		%{nil}
   %define release 	1
 %else
-  %define version 	4.1p1
+  %define version 	5.2p1
   %define cvs		cvs20050315
   %define release 	0r1
 %endif
@@ -251,7 +251,7 @@ install -m 0755 contrib/caldera/ssh-host-keygen $SKG
 # install remaining docs
 DocD="%{buildroot}%{_defaultdocdir}/%{name}-%{version}"
 mkdir -p $DocD/%{askpass}
-cp -a CREDITS ChangeLog LICENCE OVERVIEW README* TODO  $DocD
+cp -a CREDITS ChangeLog LICENCE OVERVIEW README* TODO PROTOCOL* $DocD
 install -p -m 0444 %{SOURCE3}  $DocD/faq.html
 cp -a %{askpass}/{README,ChangeLog,TODO,SshAskpass*.ad}  $DocD/%{askpass}
 %if %{use_stable}
@@ -342,6 +342,7 @@ fi
 %config %{SVIcdir}/sshd
 %{_libexecdir}/sftp-server
 %{_sbindir}/sshd
+%{_mandir}/man5/moduli.5.gz
 %{_mandir}/man5/sshd_config.5.gz
 %{_mandir}/man8/sftp-server.8.gz
 %{_mandir}/man8/sshd.8.gz
@@ -357,4 +358,4 @@ fi
 * Mon Jan 01 1998 ...
 Template Version: 1.31
 
-$Id: openssh.spec,v 1.61 2007/08/15 09:22:20 dtucker Exp $
+$Id: openssh.spec,v 1.66 2009/02/21 07:03:05 djm Exp $
