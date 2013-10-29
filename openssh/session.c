@@ -1,4 +1,4 @@
-/* $OpenBSD: session.c,v 1.258 2010/11/25 04:10:09 djm Exp $ */
+/* $OpenBSD: session.c,v 1.261 2012/12/02 20:46:11 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -273,7 +273,10 @@ do_authenticated(Authctxt *authctxt)
 	setproctitle("%s", authctxt->pw->pw_name);
 
 	/* setup the channel layer */
-	if (!no_port_forwarding_flag && options.allow_tcp_forwarding)
+	if (no_port_forwarding_flag ||
+	    (options.allow_tcp_forwarding & FORWARD_LOCAL) == 0)
+		channel_disable_adm_local_opens();
+	else
 		channel_permit_all_opens();
 
 	auth_debug_send();
@@ -383,7 +386,7 @@ do_authenticated1(Authctxt *authctxt)
 				debug("Port forwarding not permitted for this authentication.");
 				break;
 			}
-			if (!options.allow_tcp_forwarding) {
+			if (!(options.allow_tcp_forwarding & FORWARD_REMOTE)) {
 				debug("Port forwarding not permitted.");
 				break;
 			}
@@ -1408,7 +1411,7 @@ do_nologin(struct passwd *pw)
 	struct stat sb;
 
 #ifdef HAVE_LOGIN_CAP
-	if (login_getcapbool(lc, "ignorenologin", 0) && pw->pw_uid)
+	if (login_getcapbool(lc, "ignorenologin", 0) || pw->pw_uid == 0)
 		return;
 	nl = login_getcapstr(lc, "nologin", def_nl, def_nl);
 #else
@@ -1535,6 +1538,11 @@ do_setusercontext(struct passwd *pw)
 			perror("unable to set user context (setuser)");
 			exit(1);
 		}
+		/* 
+		 * FreeBSD's setusercontext() will not apply the user's
+		 * own umask setting unless running with the user's UID.
+		 */
+		(void) setusercontext(lc, pw, pw->pw_uid, LOGIN_SETUMASK);
 #else
 		/* Permanently switch to the desired uid. */
 		permanently_set_uid(pw);
@@ -2186,7 +2194,7 @@ session_break_req(Session *s)
 	packet_get_int();	/* ignored */
 	packet_check_eom();
 
-	if (s->ttyfd == -1 || tcsendbreak(s->ttyfd, 0) < 0)
+	if (s->ptymaster == -1 || tcsendbreak(s->ptymaster, 0) < 0)
 		return 0;
 	return 1;
 }
@@ -2620,7 +2628,6 @@ session_proctitle(Session *s)
 int
 session_setup_x11fwd(Session *s)
 {
-	struct stat st;
 	char display[512], auth_display[512];
 	char hostname[MAXHOSTNAMELEN];
 	u_int i;
@@ -2633,8 +2640,36 @@ session_setup_x11fwd(Session *s)
 		debug("X11 forwarding disabled in server configuration file.");
 		return 0;
 	}
-	if (!options.xauth_location ||
-	    (stat(options.xauth_location, &st) == -1)) {
+#if __APPLE__
+	if (options.xauth_location) {
+		char cmd[2048];
+		char tmpdir[MAXPATHLEN];
+		size_t len = 0;
+
+		len = confstr(_CS_DARWIN_USER_TEMP_DIR, tmpdir, sizeof(tmpdir));
+		if (len == 0) {
+			strlcpy(tmpdir, "/tmp", sizeof(tmpdir));
+		}
+
+		/* Try executing xauth (as we do below) rather than using stat,
+		 * since we want to search our $PATH.  Note that the xauth_test
+		 * file is not created if it doesn't exist, so there will be no
+		 * turds leftover.  If for some reason it does exist it will have
+		 * no effect assuming it is valid.  If it is invalid, the only
+		 * result is that xauth will error out, and X11 forwarding will
+		 * be disabled.
+		 */
+		snprintf(cmd, sizeof(cmd),
+		         "%s -f %s/xauth_test exit > /dev/null 2> /dev/null",
+			 options.xauth_location, tmpdir);
+
+		packet_send_debug("Checking for xauth using %s\n", cmd);
+		if (system(cmd) != 0) {
+			options.xauth_location = NULL;
+		}
+	}
+#endif
+	if (!options.xauth_location) {
 		packet_send_debug("No xauth program; cannot forward with spoofing.");
 		return 0;
 	}
