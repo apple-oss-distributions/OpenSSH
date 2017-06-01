@@ -1,4 +1,4 @@
-/* $OpenBSD: ssh-agent.c,v 1.212 2016/02/15 09:47:49 dtucker Exp $ */
+/* $OpenBSD: ssh-agent.c,v 1.218 2017/03/15 03:52:30 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,7 +36,6 @@
 
 #include "includes.h"
 
-#include <sys/param.h>	/* MIN MAX */
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/resource.h>
@@ -86,13 +85,14 @@
 #include "misc.h"
 #include "digest.h"
 #include "ssherr.h"
+#include "match.h"
 
 #ifdef ENABLE_PKCS11
 #include "ssh-pkcs11.h"
 #endif
 
-#if defined(HAVE_SYS_PRCTL_H)
-#include <sys/prctl.h>	/* For prctl() and PR_SET_DUMPABLE */
+#ifndef DEFAULT_PKCS11_WHITELIST
+# define DEFAULT_PKCS11_WHITELIST "/usr/lib*/*,/usr/local/lib*/*"
 #endif
 
 typedef enum {
@@ -142,13 +142,16 @@ pid_t cleanup_pid = 0;
 char socket_name[PATH_MAX];
 char socket_dir[PATH_MAX];
 
+/* PKCS#11 path whitelist */
+static char *pkcs11_whitelist;
+
 /* locking */
 #define LOCK_SIZE	32
 #define LOCK_SALT_SIZE	16
 #define LOCK_ROUNDS	1
 int locked = 0;
-char lock_passwd[LOCK_SIZE];
-char lock_salt[LOCK_SALT_SIZE];
+u_char lock_pwhash[LOCK_SIZE];
+u_char lock_salt[LOCK_SALT_SIZE];
 
 extern char *__progname;
 
@@ -546,7 +549,7 @@ reaper(void)
 				tab->nentries--;
 			} else
 				deadline = (deadline == 0) ? id->death :
-				    MIN(deadline, id->death);
+				    MINIMUM(deadline, id->death);
 		}
 	}
 	if (deadline == 0 || deadline <= now)
@@ -680,7 +683,8 @@ static void
 process_lock_agent(SocketEntry *e, int lock)
 {
 	int r, success = 0, delay;
-	char *passwd, passwdhash[LOCK_SIZE];
+	char *passwd;
+	u_char passwdhash[LOCK_SIZE];
 	static u_int fail_count = 0;
 	size_t pwlen;
 
@@ -692,11 +696,11 @@ process_lock_agent(SocketEntry *e, int lock)
 		if (bcrypt_pbkdf(passwd, pwlen, lock_salt, sizeof(lock_salt),
 		    passwdhash, sizeof(passwdhash), LOCK_ROUNDS) < 0)
 			fatal("bcrypt_pbkdf");
-		if (timingsafe_bcmp(passwdhash, lock_passwd, LOCK_SIZE) == 0) {
+		if (timingsafe_bcmp(passwdhash, lock_pwhash, LOCK_SIZE) == 0) {
 			debug("agent unlocked");
 			locked = 0;
 			fail_count = 0;
-			explicit_bzero(lock_passwd, sizeof(lock_passwd));
+			explicit_bzero(lock_pwhash, sizeof(lock_pwhash));
 			success = 1;
 		} else {
 			/* delay in 0.1s increments up to 10s */
@@ -713,7 +717,7 @@ process_lock_agent(SocketEntry *e, int lock)
 		locked = 1;
 		arc4random_buf(lock_salt, sizeof(lock_salt));
 		if (bcrypt_pbkdf(passwd, pwlen, lock_salt, sizeof(lock_salt),
-		    lock_passwd, sizeof(lock_passwd), LOCK_ROUNDS) < 0)
+		    lock_pwhash, sizeof(lock_pwhash), LOCK_ROUNDS) < 0)
 			fatal("bcrypt_pbkdf");
 		success = 1;
 	}
@@ -744,7 +748,7 @@ no_identities(SocketEntry *e, u_int type)
 static void
 process_add_smartcard_key(SocketEntry *e)
 {
-	char *provider = NULL, *pin;
+	char *provider = NULL, *pin, canonical_provider[PATH_MAX];
 	int r, i, version, count = 0, success = 0, confirm = 0;
 	u_int seconds;
 	time_t death = 0;
@@ -776,10 +780,21 @@ process_add_smartcard_key(SocketEntry *e)
 			goto send;
 		}
 	}
+	if (realpath(provider, canonical_provider) == NULL) {
+		verbose("failed PKCS#11 add of \"%.100s\": realpath: %s",
+		    provider, strerror(errno));
+		goto send;
+	}
+	if (match_pattern_list(canonical_provider, pkcs11_whitelist, 0) != 1) {
+		verbose("refusing PKCS#11 add of \"%.100s\": "
+		    "provider not whitelisted", canonical_provider);
+		goto send;
+	}
+	debug("%s: add %.100s", __func__, canonical_provider);
 	if (lifetime && !death)
 		death = monotime() + lifetime;
 
-	count = pkcs11_add_provider(provider, pin, &keys);
+	count = pkcs11_add_provider(canonical_provider, pin, &keys);
 	for (i = 0; i < count; i++) {
 		k = keys[i];
 		version = k->type == KEY_RSA1 ? 1 : 2;
@@ -787,8 +802,8 @@ process_add_smartcard_key(SocketEntry *e)
 		if (lookup_identity(k, version) == NULL) {
 			id = xcalloc(1, sizeof(Identity));
 			id->key = k;
-			id->provider = xstrdup(provider);
-			id->comment = xstrdup(provider); /* XXX */
+			id->provider = xstrdup(canonical_provider);
+			id->comment = xstrdup(canonical_provider); /* XXX */
 			id->death = death;
 			id->confirm = confirm;
 			TAILQ_INSERT_TAIL(&tab->idlist, id, next);
@@ -809,7 +824,7 @@ send:
 static void
 process_remove_smartcard_key(SocketEntry *e)
 {
-	char *provider = NULL, *pin = NULL;
+	char *provider = NULL, *pin = NULL, canonical_provider[PATH_MAX];
 	int r, version, success = 0;
 	Identity *id, *nxt;
 	Idtab *tab;
@@ -819,6 +834,13 @@ process_remove_smartcard_key(SocketEntry *e)
 		fatal("%s: buffer error: %s", __func__, ssh_err(r));
 	free(pin);
 
+	if (realpath(provider, canonical_provider) == NULL) {
+		verbose("failed PKCS#11 add of \"%.100s\": realpath: %s",
+		    provider, strerror(errno));
+		goto send;
+	}
+
+	debug("%s: remove %.100s", __func__, canonical_provider);
 	for (version = 1; version < 3; version++) {
 		tab = idtab_lookup(version);
 		for (id = TAILQ_FIRST(&tab->idlist); id; id = nxt) {
@@ -826,18 +848,19 @@ process_remove_smartcard_key(SocketEntry *e)
 			/* Skip file--based keys */
 			if (id->provider == NULL)
 				continue;
-			if (!strcmp(provider, id->provider)) {
+			if (!strcmp(canonical_provider, id->provider)) {
 				TAILQ_REMOVE(&tab->idlist, id, next);
 				free_identity(id);
 				tab->nentries--;
 			}
 		}
 	}
-	if (pkcs11_del_provider(provider) == 0)
+	if (pkcs11_del_provider(canonical_provider) == 0)
 		success = 1;
 	else
 		error("process_remove_smartcard_key:"
 		    " pkcs11_del_provider failed");
+send:
 	free(provider);
 	send_status(e, success);
 }
@@ -997,7 +1020,7 @@ prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp,
 		switch (sockets[i].type) {
 		case AUTH_SOCKET:
 		case AUTH_CONNECTION:
-			n = MAX(n, sockets[i].fd);
+			n = MAXIMUM(n, sockets[i].fd);
 			break;
 		case AUTH_UNUSED:
 			break;
@@ -1036,7 +1059,7 @@ prepare_select(fd_set **fdrp, fd_set **fdwp, int *fdl, u_int *nallocp,
 	deadline = reaper();
 	if (parent_alive_interval != 0)
 		deadline = (deadline == 0) ? parent_alive_interval :
-		    MIN(deadline, parent_alive_interval);
+		    MINIMUM(deadline, parent_alive_interval);
 	if (deadline == 0) {
 		*tvpp = NULL;
 	} else {
@@ -1179,7 +1202,7 @@ usage(void)
 {
 	fprintf(stderr,
 	    "usage: ssh-agent [-c | -s] [-Dd] [-a bind_address] [-E fingerprint_hash]\n"
-	    "                 [-t life] [command [arg ...]]\n"
+	    "                 [-P pkcs11_whitelist] [-t life] [command [arg ...]]\n"
 	    "       ssh-agent [-c | -s] -k\n");
 	exit(1);
 }
@@ -1187,11 +1210,10 @@ usage(void)
 int
 main(int ac, char **av)
 {
-#ifdef __APPLE_LAUNCHD__
-	int c_flag = 0, d_flag = 0, D_flag = 0, k_flag = 0, s_flag = 0, l_flag = 0;
-#else
 	int c_flag = 0, d_flag = 0, D_flag = 0, k_flag = 0, s_flag = 0;
-#endif
+	#ifdef __APPLE_LAUNCHD__
+	int l_flag = 0;
+	#endif
 	int sock, fd, ch, result, saved_errno;
 	u_int nalloc;
 	char *shell, *format, *pidstr, *agentsocket = NULL;
@@ -1215,10 +1237,7 @@ main(int ac, char **av)
 	setegid(getgid());
 	setgid(getgid());
 
-#if defined(HAVE_PRCTL) && defined(PR_SET_DUMPABLE)
-	/* Disable ptrace on Linux without sgid bit */
-	prctl(PR_SET_DUMPABLE, 0);
-#endif
+	platform_disable_tracing(0);	/* strict=no */
 
 #ifdef WITH_OPENSSL
 	OpenSSL_add_all_algorithms();
@@ -1228,9 +1247,9 @@ main(int ac, char **av)
 	seed_rng();
 
 #ifdef __APPLE_LAUNCHD__
-	while ((ch = getopt(ac, av, "cDdklsE:a:t:")) != -1) {
+	while ((ch = getopt(ac, av, "cDdklsE:a:P:t:")) != -1) {
 #else
-	while ((ch = getopt(ac, av, "cDdksE:a:t:")) != -1) {
+	while ((ch = getopt(ac, av, "cDdksE:a:P:t:")) != -1) {
 #endif
 		switch (ch) {
 		case 'E':
@@ -1245,6 +1264,11 @@ main(int ac, char **av)
 			break;
 		case 'k':
 			k_flag++;
+			break;
+		case 'P':
+			if (pkcs11_whitelist != NULL)
+				fatal("-P option already specified");
+			pkcs11_whitelist = xstrdup(optarg);
 			break;
 #ifdef __APPLE_LAUNCHD__
 		case 'l':
@@ -1284,6 +1308,9 @@ main(int ac, char **av)
 
 	if (ac > 0 && (c_flag || k_flag || s_flag || d_flag || D_flag))
 		usage();
+
+	if (pkcs11_whitelist == NULL)
+		pkcs11_whitelist = xstrdup(DEFAULT_PKCS11_WHITELIST);
 
 	if (ac == 0 && !c_flag && !s_flag) {
 		shell = getenv("SHELL");
@@ -1461,7 +1488,7 @@ skip2:
 	signal(SIGTERM, cleanup_handler);
 	nalloc = 0;
 
-	if (pledge("stdio cpath unix id proc exec", NULL) == -1)
+	if (pledge("stdio rpath cpath unix id proc exec", NULL) == -1)
 		fatal("%s: pledge: %s", __progname, strerror(errno));
 	platform_pledge_agent();
 

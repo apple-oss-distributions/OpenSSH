@@ -1,6 +1,9 @@
 /* config.h.  Generated from config.h.in by configure.  */
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Define if building universal (internal helper macro) */
+/* #undef AC_APPLE_UNIVERSAL_BUILD */
+
 /* Define if you have a getaddrinfo that fails for the all-zeros IPv6 address
    */
 /* #undef AIX_GETNAMEINFO_HACK */
@@ -34,9 +37,6 @@
 
 /* ia_uinfo routines not supported by OS yet */
 /* #undef BROKEN_LIBIAF */
-
-/* Ultrix mmap can't map files */
-/* #undef BROKEN_MMAP */
 
 /* Define if your struct dirent expects you to allocate extra space for d_name
    */
@@ -76,7 +76,7 @@
 /* Define if your snprintf is busted */
 /* #undef BROKEN_SNPRINTF */
 
-/* FreeBSD strnvis argument order is swapped compared to OpenBSD */
+/* strnvis detected broken */
 #define BROKEN_STRNVIS 1
 
 /* tcgetattr with ICANON may hang */
@@ -131,7 +131,7 @@
 #define DISABLE_WTMPX 1
 
 /* Enable for PKCS#11 support */
-#define ENABLE_PKCS11 
+#define ENABLE_PKCS11 /**/
 
 /* File names may not contain backslash characters */
 /* #undef FILESYSTEM_NO_BACKSLASH */
@@ -260,7 +260,7 @@
 #define HAVE_CLOCK 1
 
 /* Have clock_gettime */
-/* #undef HAVE_CLOCK_GETTIME */
+#define HAVE_CLOCK_GETTIME 1
 
 /* define if you have clock_t data type */
 #define HAVE_CLOCK_T 1
@@ -400,6 +400,15 @@
 
 /* Define to 1 if you have the `endutxent' function. */
 #define HAVE_ENDUTXENT 1
+
+/* Define to 1 if you have the `err' function. */
+#define HAVE_ERR 1
+
+/* Define to 1 if you have the `errx' function. */
+#define HAVE_ERRX 1
+
+/* Define to 1 if you have the <err.h> header file. */
+#define HAVE_ERR_H 1
 
 /* Define if your system has /etc/default/login */
 /* #undef HAVE_ETC_DEFAULT_LOGIN */
@@ -668,6 +677,9 @@
 /* Define to 1 if you have the `krb5_get_error_message' function. */
 #define HAVE_KRB5_GET_ERROR_MESSAGE 1
 
+/* Define to 1 if you have the <langinfo.h> header file. */
+#define HAVE_LANGINFO_H 1
+
 /* Define to 1 if you have the <lastlog.h> header file. */
 /* #undef HAVE_LASTLOG_H */
 
@@ -725,6 +737,9 @@
 /* Define to 1 if you have the <linux/seccomp.h> header file. */
 /* #undef HAVE_LINUX_SECCOMP_H */
 
+/* Define to 1 if you have the `llabs' function. */
+#define HAVE_LLABS 1
+
 /* Define to 1 if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
 
@@ -758,6 +773,9 @@
 /* Define to 1 if you have the `mblen' function. */
 #define HAVE_MBLEN 1
 
+/* Define to 1 if you have the `mbtowc' function. */
+#define HAVE_MBTOWC 1
+
 /* Define to 1 if you have the `md5_crypt' function. */
 /* #undef HAVE_MD5_CRYPT */
 
@@ -775,9 +793,6 @@
 
 /* Define to 1 if you have the `mkdtemp' function. */
 #define HAVE_MKDTEMP 1
-
-/* Define to 1 if you have the `mmap' function. */
-#define HAVE_MMAP 1
 
 /* define if you have mode_t data type */
 #define HAVE_MODE_T 1
@@ -802,6 +817,9 @@
 
 /* Define to 1 if you have the `ngetaddrinfo' function. */
 /* #undef HAVE_NGETADDRINFO */
+
+/* Define to 1 if you have the `nl_langinfo' function. */
+#define HAVE_NL_LANGINFO 1
 
 /* Define to 1 if you have the `nsleep' function. */
 /* #undef HAVE_NSLEEP */
@@ -892,7 +910,7 @@
 #define HAVE_RECVMSG 1
 
 /* sys/resource.h has RLIMIT_NPROC */
-#define HAVE_RLIMIT_NPROC 
+#define HAVE_RLIMIT_NPROC /**/
 
 /* Define to 1 if you have the <rpc/types.h> header file. */
 #define HAVE_RPC_TYPES_H 1
@@ -962,6 +980,9 @@
 
 /* Define to 1 if you have the `setpcred' function. */
 /* #undef HAVE_SETPCRED */
+
+/* Define to 1 if you have the `setpflags' function. */
+/* #undef HAVE_SETPFLAGS */
 
 /* Define to 1 if you have the `setppriv' function. */
 /* #undef HAVE_SETPPRIV */
@@ -1053,6 +1074,9 @@
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
 
+/* Define to 1 if you have the `strcasestr' function. */
+#define HAVE_STRCASESTR 1
+
 /* Define to 1 if you have the `strdup' function. */
 #define HAVE_STRDUP 1
 
@@ -1110,28 +1134,28 @@
 /* define if you have struct in6_addr data type */
 #define HAVE_STRUCT_IN6_ADDR 1
 
-/* Define to 1 if `pw_change' is member of `struct passwd'. */
+/* Define to 1 if `pw_change' is a member of `struct passwd'. */
 #define HAVE_STRUCT_PASSWD_PW_CHANGE 1
 
-/* Define to 1 if `pw_class' is member of `struct passwd'. */
+/* Define to 1 if `pw_class' is a member of `struct passwd'. */
 #define HAVE_STRUCT_PASSWD_PW_CLASS 1
 
-/* Define to 1 if `pw_expire' is member of `struct passwd'. */
+/* Define to 1 if `pw_expire' is a member of `struct passwd'. */
 #define HAVE_STRUCT_PASSWD_PW_EXPIRE 1
 
-/* Define to 1 if `pw_gecos' is member of `struct passwd'. */
+/* Define to 1 if `pw_gecos' is a member of `struct passwd'. */
 #define HAVE_STRUCT_PASSWD_PW_GECOS 1
 
 /* define if you have struct sockaddr_in6 data type */
 #define HAVE_STRUCT_SOCKADDR_IN6 1
 
-/* Define to 1 if `sin6_scope_id' is member of `struct sockaddr_in6'. */
+/* Define to 1 if `sin6_scope_id' is a member of `struct sockaddr_in6'. */
 #define HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID 1
 
 /* define if you have struct sockaddr_storage data type */
 #define HAVE_STRUCT_SOCKADDR_STORAGE 1
 
-/* Define to 1 if `st_blksize' is member of `struct stat'. */
+/* Define to 1 if `st_blksize' is a member of `struct stat'. */
 #define HAVE_STRUCT_STAT_ST_BLKSIZE 1
 
 /* Define to 1 if the system has the type `struct timespec'. */
@@ -1194,6 +1218,9 @@
 /* Define to 1 if you have the <sys/ptms.h> header file. */
 /* #undef HAVE_SYS_PTMS_H */
 
+/* Define to 1 if you have the <sys/ptrace.h> header file. */
+#define HAVE_SYS_PTRACE_H 1
+
 /* Define to 1 if you have the <sys/select.h> header file. */
 #define HAVE_SYS_SELECT_H 1
 
@@ -1249,7 +1276,7 @@
 /* #undef HAVE_TIME_IN_UTMPX */
 
 /* Define to 1 if you have the `timingsafe_bcmp' function. */
-/* #undef HAVE_TIMINGSAFE_BCMP */
+#define HAVE_TIMINGSAFE_BCMP 1
 
 /* Define to 1 if you have the <tmpdir.h> header file. */
 /* #undef HAVE_TMPDIR_H */
@@ -1353,6 +1380,15 @@
 /* Define to 1 if you have the `waitpid' function. */
 #define HAVE_WAITPID 1
 
+/* Define to 1 if you have the `warn' function. */
+#define HAVE_WARN 1
+
+/* Define to 1 if you have the <wchar.h> header file. */
+#define HAVE_WCHAR_H 1
+
+/* Define to 1 if you have the `wcwidth' function. */
+#define HAVE_WCWIDTH 1
+
 /* Define to 1 if you have the `_getlong' function. */
 #define HAVE__GETLONG 1
 
@@ -1426,18 +1462,8 @@
 /* String used in /etc/passwd to denote locked account */
 /* #undef LOCKED_PASSWD_SUBSTR */
 
-/* Some versions of /bin/login need the TERM supplied on the commandline */
-/* #undef LOGIN_NEEDS_TERM */
-
 /* Some systems need a utmpx entry for /bin/login to work */
 /* #undef LOGIN_NEEDS_UTMPX */
-
-/* Define if your login program cannot handle end of options ("--") */
-/* #undef LOGIN_NO_ENDOPT */
-
-/* If your header files don't define LOGIN_PROGRAM, then use this (detected)
-   from environment and PATH */
-#define LOGIN_PROGRAM_FALLBACK "/usr/bin/login"
 
 /* Set this to your mail directory if you do not have _PATH_MAILDIR */
 /* #undef MAIL_DIRECTORY */
@@ -1447,9 +1473,6 @@
 
 /* compiler does not accept __attribute__ on return types */
 /* #undef NO_ATTRIBUTE_ON_RETURN_TYPE */
-
-/* Define if the concept of ports only accessible to superusers isn't known */
-/* #undef NO_IPPORT_RESERVED_CONCEPT */
 
 /* Define if you don't want to use lastlog in session.c */
 /* #undef NO_SSH_LASTLOG */
@@ -1498,6 +1521,9 @@
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "openssh"
+
+/* Define to the home page for this package. */
+#define PACKAGE_URL ""
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "Portable"
@@ -1587,6 +1613,9 @@
 
 /* Define if sshd somehow reacquires a controlling TTY after setsid() */
 /* #undef SSHD_ACQUIRES_CTTY */
+
+/* sshd PAM service name */
+/* #undef SSHD_PAM_SERVICE */
 
 /* Define if pam_chauthtok wants real uid set to the unpriv'ed user */
 /* #undef SSHPAM_CHAUTHTOK_NEEDS_RUID */
@@ -1694,12 +1723,25 @@
 /* include SSH protocol version 1 support */
 /* #undef WITH_SSH1 */
 
-/* Define to 1 if your processor stores words with the most significant byte
-   first (like Motorola and SPARC, unlike Intel and VAX). */
-/* #undef WORDS_BIGENDIAN */
+/* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
+   significant byte first (like Motorola and SPARC, unlike Intel). */
+#if defined AC_APPLE_UNIVERSAL_BUILD
+# if defined __BIG_ENDIAN__
+#  define WORDS_BIGENDIAN 1
+# endif
+#else
+# ifndef WORDS_BIGENDIAN
+/* #  undef WORDS_BIGENDIAN */
+# endif
+#endif
 
 /* Define if xauth is found in your path */
 #define XAUTH_PATH "xauth"
+
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef _DARWIN_USE_64_BIT_INODE
+# define _DARWIN_USE_64_BIT_INODE 1
+#endif
 
 /* Number of bits in a file offset, on hosts where this is settable. */
 /* #undef _FILE_OFFSET_BITS */
