@@ -4,7 +4,6 @@ set -v
 
 cd openssh
 ./configure --with-pam --with-audit=bsm --with-kerberos5=/usr \
- --disable-security-key \
  --disable-libutil \
  --disable-pututline \
  --with-xauth="xauth" \
