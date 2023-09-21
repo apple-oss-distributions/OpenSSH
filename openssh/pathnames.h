@@ -13,11 +13,6 @@
  */
 
 #define ETCDIR				"/etc"
-#if TARGET_OS_OSX
-#else
-#define _PATH_SSH_PROGRAM		"/usr/local/bin/ssh"
-#define _PATH_SFTP_SERVER		"/usr/local/libexec/sftp-server"
-#endif
 
 #ifndef SSHDIR
 #define SSHDIR				ETCDIR "/ssh"
@@ -132,6 +127,16 @@
 /* Location of ssh-keysign for hostbased authentication */
 #ifndef _PATH_SSH_KEY_SIGN
 #define _PATH_SSH_KEY_SIGN		"/usr/libexec/ssh-keysign"
+#endif
+
+#if defined(ENABLE_PKCS11) && defined(__APPLE_KEYCHAIN__)
+/*
+ * Location of ssh-apple-pkcs11 binary to support PKCS#11 without granting
+ * PKCS#11 providers access to privileged entitlements.
+ */
+#ifndef _PATH_SSH_APPLE_PKCS11
+#define _PATH_SSH_APPLE_PKCS11		"/usr/libexec/ssh-apple-pkcs11"
+#endif
 #endif
 
 /* Location of ssh-pkcs11-helper to support keys in tokens */
