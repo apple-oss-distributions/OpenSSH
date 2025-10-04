@@ -1,9 +1,10 @@
 #!/bin/sh
-#       $OpenBSD: mlkem768.sh,v 1.2 2024/09/04 05:11:33 djm Exp $
+#       $OpenBSD: mlkem768.sh,v 1.3 2024/10/27 02:06:01 djm Exp $
 #       Placed in the Public Domain.
 #
 
-WANT_LIBCRUX_REVISION="origin/main"
+#WANT_LIBCRUX_REVISION="origin/main"
+WANT_LIBCRUX_REVISION="84c5d87b3092c59294345aa269ceefe0eb97cc35"
 
 FILES="
 	libcrux/libcrux-ml-kem/cg/eurydice_glue.h
@@ -47,6 +48,12 @@ echo '#define KRML_NOINLINE __attribute__((noinline, unused))'
 echo '#define KRML_HOST_EPRINTF(...)'
 echo '#define KRML_HOST_EXIT(x) fatal_f("internal error")'
 echo
+
+__builtin_popcount_replacement='
+  const uint8_t v[16] = { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4 };
+  return v[x0 & 0xf] + v[(x0 >> 4) & 0xf];
+'
+
 for i in $FILES; do
 	echo "/* from $i */"
 	# Changes to all files:
@@ -56,11 +63,19 @@ for i in $FILES; do
 	    -e 's/[	 ]*$//' \
 	    $i | \
 	case "$i" in
-	# XXX per-file handling goes here.
+	*/libcrux-ml-kem/cg/eurydice_glue.h)
+		# Replace endian functions with versions that work.
+		perl -0777 -pe 's/(static inline void core_num__u64_9__to_le_bytes.*\n)([^}]*\n)/\1  v = htole64(v);\n\2/' |
+		perl -0777 -pe 's/(static inline uint64_t core_num__u64_9__from_le_bytes.*?)return v;/\1return le64toh(v);/s' |
+		perl -0777 -pe 's/(static inline uint32_t core_num__u32_8__from_le_bytes.*?)return v;/\1return le32toh(v);/s' |
+		# Compat for popcount.
+		perl -0777 -pe 's/\#ifdef (_MSC_VER)(.*?return __popcnt\(x0\);)/\#if defined(\1)\2/s' |
+		perl -0777 -pe "s/\\#else(\\n\\s+return __builtin_popcount\\(x0\\);)/\\#elif !defined(MISSING_BUILTIN_POPCOUNT)\\1\\n#else$__builtin_popcount_replacement/s"
+		;;
 	# Default: pass through.
 	*)
-	    cat
-	    ;;
+		cat
+		;;
 	esac
 	echo
 done

@@ -1,9 +1,9 @@
 import System
 import XCTest
 
-final class HostKeyGeneratorTest: XCTestCase {
+final class HostKeyManagerTest: XCTestCase {
   var tmpdir: FilePath {
-    FilePath(NSTemporaryDirectory()).appending("HostKeyGeneratorTest")
+    FilePath(NSTemporaryDirectory()).appending("HostKeyManagerTest")
   }
 
   var pathPrefix: FilePath {
@@ -32,7 +32,7 @@ final class HostKeyGeneratorTest: XCTestCase {
   func testHostKeyGeneration() async throws {
     var created: Bool
     let keygen = pathPrefix.appending("bin/ssh-keygen")
-    let generator = HostKeyGenerator(keygen: keygen, directory: tmpdir)
+    let generator = HostKeyManager(keygen: keygen, hostKeysDirectory: tmpdir)
     XCTAssertFalse(tmpdir.appending("ssh_host_ecdsa_key").exists())
     created = try await generator.generate(algorithm: .ecdsa)
     XCTAssertTrue(created)
@@ -48,7 +48,7 @@ final class HostKeyGeneratorTest: XCTestCase {
 
   func testHostKeyGenerationFailure1() async throws {
     let keygen = FilePath("/usr/bin/ssh-keygen-nonexistent")
-    let generator = HostKeyGenerator(keygen: keygen, directory: tmpdir)
+    let generator = HostKeyManager(keygen: keygen, hostKeysDirectory: tmpdir)
     do {
       _ = try await generator.generate(algorithm: .ecdsa)
       XCTFail("expected an error to be thrown")
@@ -62,7 +62,7 @@ final class HostKeyGeneratorTest: XCTestCase {
   }
   func testHostKeyGenerationFailure2() async throws {
     let keygen = pathPrefix.appending("bin/ssh-keygen")
-    let generator = HostKeyGenerator(keygen: keygen, directory: FilePath("/no/such/directory"))
+    let generator = HostKeyManager(keygen: keygen, hostKeysDirectory: FilePath("/no/such/directory"))
     do {
       _ = try await generator.generate(algorithm: .ecdsa)
       XCTFail("expected an error to be thrown")
